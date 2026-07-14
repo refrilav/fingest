@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { parseOfx } from '../lib/parseOfx'
 import { formatDateBR, formatCurrencyBRL } from '../lib/format'
 import { Upload, Landmark, Check, Link2, X, Plus } from 'lucide-react'
+import BuscaPessoa from '../components/BuscaPessoa'
 
 export default function Conciliacao() {
   const [contas, setContas] = useState([])
@@ -12,8 +13,6 @@ export default function Conciliacao() {
   const [lancamentosAbertos, setLancamentosAbertos] = useState({ pagar: [], receber: [] })
   const [categorias, setCategorias] = useState({ despesa: [], receita: [] })
   const [centros, setCentros] = useState([])
-  const [fornecedores, setFornecedores] = useState([])
-  const [clientes, setClientes] = useState([])
   const [criandoParaId, setCriandoParaId] = useState(null)
   const [novoLancamento, setNovoLancamento] = useState({})
   const [loading, setLoading] = useState(false)
@@ -29,19 +28,15 @@ export default function Conciliacao() {
     carregarContas()
 
     async function carregarApoio() {
-      const [cats, cent, forn, cli] = await Promise.all([
+      const [cats, cent] = await Promise.all([
         supabase.from('categorias').select('*').eq('ativo', true).order('nome').range(0, 9999),
         supabase.from('centros_de_custo').select('*').eq('ativo', true).order('nome').range(0, 9999),
-        supabase.from('fornecedores').select('*').eq('ativo', true).order('nome').range(0, 9999),
-        supabase.from('clientes').select('*').eq('ativo', true).order('nome').range(0, 9999),
       ])
       setCategorias({
         despesa: (cats.data || []).filter((c) => c.tipo === 'despesa'),
         receita: (cats.data || []).filter((c) => c.tipo === 'receita'),
       })
       setCentros(cent.data || [])
-      setFornecedores(forn.data || [])
-      setClientes(cli.data || [])
     }
     carregarApoio()
   }, [])
@@ -345,16 +340,12 @@ export default function Conciliacao() {
                         <option key={c.id} value={c.id}>{c.nome}</option>
                       ))}
                     </select>
-                    <select
+                    <BuscaPessoa
+                      tabela={novoLancamento.tipo === 'pagar' ? 'fornecedores' : 'clientes'}
                       value={novoLancamento.pessoa_id}
-                      onChange={(e) => setNovoLancamento({ ...novoLancamento, pessoa_id: e.target.value })}
-                      className="col-span-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                    >
-                      <option value="">{novoLancamento.tipo === 'pagar' ? 'Fornecedor...' : 'Cliente...'}</option>
-                      {(novoLancamento.tipo === 'pagar' ? fornecedores : clientes).map((p) => (
-                        <option key={p.id} value={p.id}>{p.nome}</option>
-                      ))}
-                    </select>
+                      onChange={(id) => setNovoLancamento({ ...novoLancamento, pessoa_id: id })}
+                      placeholder={novoLancamento.tipo === 'pagar' ? 'Buscar fornecedor...' : 'Buscar cliente...'}
+                    />
                     <div className="col-span-2 flex justify-end gap-2">
                       <button
                         onClick={() => setCriandoParaId(null)}

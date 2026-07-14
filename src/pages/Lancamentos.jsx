@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO, isOverdue, addMonthsISO } from '../lib/format'
 import { Plus, Trash2, CheckCircle2, X, Repeat } from 'lucide-react'
+import BuscaPessoa from '../components/BuscaPessoa'
 
 const CAMPOS_VAZIOS = {
   descricao: '',
@@ -25,7 +26,6 @@ export default function Lancamentos({ tipo }) {
   const [lista, setLista] = useState([])
   const [categorias, setCategorias] = useState([])
   const [centros, setCentros] = useState([])
-  const [pessoas, setPessoas] = useState([]) // fornecedores ou clientes
   const [equipamentos, setEquipamentos] = useState([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
@@ -40,7 +40,7 @@ export default function Lancamentos({ tipo }) {
 
   async function carregar() {
     setLoading(true)
-    const [lanc, cats, cent, pes, equips] = await Promise.all([
+    const [lanc, cats, cent, equips] = await Promise.all([
       supabase
         .from('lancamentos')
         .select('*, categorias(nome), centros_de_custo(nome), fornecedores(nome), clientes(nome), equipamentos(nome)')
@@ -49,7 +49,6 @@ export default function Lancamentos({ tipo }) {
         .range(0, 9999),
       supabase.from('categorias').select('*').eq('tipo', tipoCategoria).eq('ativo', true).order('nome').range(0, 9999),
       supabase.from('centros_de_custo').select('*').eq('ativo', true).order('nome').range(0, 9999),
-      supabase.from(tabelaPessoa).select('*').eq('ativo', true).order('nome').range(0, 9999),
       tipo === 'receber'
         ? supabase.from('equipamentos').select('*').eq('ativo', true).order('nome').range(0, 9999)
         : Promise.resolve({ data: [] }),
@@ -59,7 +58,6 @@ export default function Lancamentos({ tipo }) {
     else setLista(lanc.data)
     setCategorias(cats.data || [])
     setCentros(cent.data || [])
-    setPessoas(pes.data || [])
     setEquipamentos(equips.data || [])
     setLoading(false)
   }
@@ -319,16 +317,12 @@ export default function Lancamentos({ tipo }) {
               <option key={c.id} value={c.id}>{c.nome}</option>
             ))}
           </select>
-          <select
+          <BuscaPessoa
+            tabela={tabelaPessoa}
             value={form[campoPessoa]}
-            onChange={(e) => setForm({ ...form, [campoPessoa]: e.target.value })}
-            className="col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-          >
-            <option value="">{tipo === 'pagar' ? 'Fornecedor...' : 'Cliente...'}</option>
-            {pessoas.map((p) => (
-              <option key={p.id} value={p.id}>{p.nome}</option>
-            ))}
-          </select>
+            onChange={(id) => setForm({ ...form, [campoPessoa]: id })}
+            placeholder={tipo === 'pagar' ? 'Buscar fornecedor por nome...' : 'Buscar cliente por nome...'}
+          />
           {tipo === 'receber' && (
             <select
               value={form.equipamento_id}
