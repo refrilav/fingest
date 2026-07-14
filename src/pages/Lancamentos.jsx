@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO, isOverdue, addMonthsISO } from '../lib/format'
-import { Plus, Trash2, CheckCircle2, X, Repeat } from 'lucide-react'
+import { Plus, Trash2, CheckCircle2, X, Repeat, Pencil } from 'lucide-react'
 import BuscaPessoa from '../components/BuscaPessoa'
 
 const CAMPOS_VAZIOS = {
@@ -20,6 +20,8 @@ const CAMPOS_VAZIOS = {
   juros: '',
   repeticao: 'unico', // 'unico' | 'parcelado' | 'recorrente'
   quantidade: '2',
+  conta_bancaria_id: '',
+  data_pagamento: '',
 }
 
 // tipo: 'pagar' | 'receber'
@@ -36,6 +38,7 @@ export default function Lancamentos({ tipo }) {
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [pagandoId, setPagandoId] = useState(null)
   const [contaEscolhida, setContaEscolhida] = useState('')
+  const [editandoId, setEditandoId] = useState(null)
 
   const tabelaPessoa = tipo === 'pagar' ? 'fornecedores' : 'clientes'
   const campoPessoa = tipo === 'pagar' ? 'fornecedor_id' : 'cliente_id'
@@ -78,6 +81,47 @@ export default function Lancamentos({ tipo }) {
   async function salvar(e) {
     e.preventDefault()
     if (!form.descricao.trim() || !form.valor || !form.data_vencimento) return
+
+    // Modo edição: atualiza um único lançamento existente, sem lógica de parcelamento
+    if (editandoId) {
+      const desconto = Number(form.desconto) || 0
+      const juros = Number(form.juros) || 0
+      const valor = Number(form.valor)
+
+      const payload = {
+        descricao: form.descricao.trim(),
+        valor,
+        desconto,
+        juros,
+        data_vencimento: form.data_vencimento,
+        data_competencia: form.data_competencia || form.data_vencimento,
+        categoria_id: form.categoria_id || null,
+        centro_custo_id: form.centro_custo_id || null,
+        [campoPessoa]: form[campoPessoa] || null,
+        equipamento_id: tipo === 'receber' ? form.equipamento_id || null : null,
+        observacoes: form.observacoes || null,
+        forma_pagamento: form.forma_pagamento || null,
+      }
+
+      // Se o lançamento já está pago, permite editar também dados do pagamento
+      const itemOriginal = lista.find((l) => l.id === editandoId)
+      if (itemOriginal?.status === 'pago') {
+        payload.valor_pago = valor - desconto + juros
+        payload.data_pagamento = form.data_pagamento || itemOriginal.data_pagamento
+        payload.conta_bancaria_id = form.conta_bancaria_id || null
+      }
+
+      const { error } = await supabase.from('lancamentos').update(payload).eq('id', editandoId)
+      if (error) {
+        setErro(error.message)
+        return
+      }
+      setForm(CAMPOS_VAZIOS)
+      setEditandoId(null)
+      setMostrarForm(false)
+      carregar()
+      return
+    }
 
     const basePayload = {
       tipo,
@@ -159,6 +203,36 @@ export default function Lancamentos({ tipo }) {
     carregar()
   }
 
+  function iniciarEdicao(item) {
+    setForm({
+      descricao: item.descricao || '',
+      valor: String(item.valor ?? ''),
+      data_vencimento: (item.data_vencimento || '').substring(0, 10),
+      data_competencia: (item.data_competencia || item.data_vencimento || '').substring(0, 10),
+      categoria_id: item.categoria_id || '',
+      centro_custo_id: item.centro_custo_id || '',
+      fornecedor_id: item.fornecedor_id || '',
+      cliente_id: item.cliente_id || '',
+      equipamento_id: item.equipamento_id || '',
+      observacoes: item.observacoes || '',
+      forma_pagamento: item.forma_pagamento || '',
+      desconto: String(item.desconto ?? '0'),
+      juros: String(item.juros ?? '0'),
+      repeticao: 'unico',
+      quantidade: '2',
+      conta_bancaria_id: item.conta_bancaria_id || '',
+      data_pagamento: (item.data_pagamento || '').substring(0, 10),
+    })
+    setEditandoId(item.id)
+    setMostrarForm(true)
+  }
+
+  function cancelarFormulario() {
+    setForm(CAMPOS_VAZIOS)
+    setEditandoId(null)
+    setMostrarForm(false)
+  }
+
   function abrirPagamento(item) {
     setPagandoId(item.id)
     setContaEscolhida(contasBancarias.length > 0 ? contasBancarias[0].id : '')
@@ -218,12 +292,22 @@ export default function Lancamentos({ tipo }) {
     .filter((i) => i.status === 'aberto')
     .reduce((acc, i) => acc + Number(i.valor), 0)
 
+  const itemEditando = editandoId ? lista.find((l) => l.id === editandoId) : null
+  const editandoItemPago = itemEditando?.status === 'pago'
+
   return (
     <div className="max-w-4xl">
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-2xl font-bold text-gray-900">{titulo}</h2>
         <button
-          onClick={() => setMostrarForm((v) => !v)}
+          onClick={() => {
+            if (mostrarForm) {
+              cancelarFormulario()
+            } else {
+              setForm(CAMPOS_VAZIOS)
+              setMostrarForm(true)
+            }
+          }}
           className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700"
         >
           <Plus size={16} /> Novo lançamento
@@ -237,6 +321,9 @@ export default function Lancamentos({ tipo }) {
 
       {mostrarForm && (
         <form onSubmit={salvar} className="bg-white border border-gray-200 rounded-lg p-4 mb-6 grid grid-cols-2 gap-3">
+          {editandoId && (
+            <p className="col-span-2 text-sm font-medium text-primary-700 -mb-1">Editando lançamento</p>
+          )}
           <input
             placeholder="Descrição *"
             value={form.descricao}
@@ -245,24 +332,26 @@ export default function Lancamentos({ tipo }) {
             required
           />
 
-          <div className="col-span-2 flex gap-2 bg-gray-50 rounded-lg p-1">
-            {[
-              { valor: 'unico', label: 'Único' },
-              { valor: 'parcelado', label: 'Parcelado' },
-              { valor: 'recorrente', label: 'Recorrente' },
-            ].map((opt) => (
-              <button
-                key={opt.valor}
-                type="button"
-                onClick={() => setForm({ ...form, repeticao: opt.valor })}
-                className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-                  form.repeticao === opt.valor ? 'bg-white shadow-sm text-primary-700' : 'text-gray-500'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          {!editandoId && (
+            <div className="col-span-2 flex gap-2 bg-gray-50 rounded-lg p-1">
+              {[
+                { valor: 'unico', label: 'Único' },
+                { valor: 'parcelado', label: 'Parcelado' },
+                { valor: 'recorrente', label: 'Recorrente' },
+              ].map((opt) => (
+                <button
+                  key={opt.valor}
+                  type="button"
+                  onClick={() => setForm({ ...form, repeticao: opt.valor })}
+                  className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
+                    form.repeticao === opt.valor ? 'bg-white shadow-sm text-primary-700' : 'text-gray-500'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           <input
             type="number"
@@ -376,6 +465,28 @@ export default function Lancamentos({ tipo }) {
             onChange={(e) => setForm({ ...form, juros: e.target.value })}
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
+
+          {editandoItemPago && (
+            <>
+              <div className="col-span-2 text-xs text-gray-500 -mb-2 mt-1">Dados do pagamento</div>
+              <select
+                value={form.conta_bancaria_id}
+                onChange={(e) => setForm({ ...form, conta_bancaria_id: e.target.value })}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="">{tipo === 'pagar' ? 'Saiu de...' : 'Entrou em...'}</option>
+                {contasBancarias.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nome}</option>
+                ))}
+              </select>
+              <input
+                type="date"
+                value={form.data_pagamento}
+                onChange={(e) => setForm({ ...form, data_pagamento: e.target.value })}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </>
+          )}
           <textarea
             placeholder="Observações"
             value={form.observacoes}
@@ -384,11 +495,11 @@ export default function Lancamentos({ tipo }) {
             rows={2}
           />
           <div className="col-span-2 flex justify-end gap-2">
-            <button type="button" onClick={() => setMostrarForm(false)} className="px-4 py-2 text-sm text-gray-500">
+            <button type="button" onClick={cancelarFormulario} className="px-4 py-2 text-sm text-gray-500">
               Cancelar
             </button>
             <button type="submit" className="rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700">
-              Salvar
+              {editandoId ? 'Salvar alterações' : 'Salvar'}
             </button>
           </div>
         </form>
@@ -461,6 +572,13 @@ export default function Lancamentos({ tipo }) {
                         <X size={16} />
                       </button>
                     )}
+                    <button
+                      onClick={() => iniciarEdicao(item)}
+                      title="Editar lançamento"
+                      className="text-gray-400 hover:text-primary-600 p-1 rounded"
+                    >
+                      <Pencil size={16} />
+                    </button>
                     <button onClick={() => excluir(item.id)} className="text-gray-400 hover:text-red-600 p-1 rounded">
                       <Trash2 size={16} />
                     </button>
