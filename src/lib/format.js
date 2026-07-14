@@ -85,6 +85,28 @@ export function mesAtualISO() {
   return todayISO().substring(0, 7) // 'YYYY-MM'
 }
 
+// Gera array de meses 'YYYY-MM' entre início e fim (inclusive)
+export function gerarIntervaloMeses(mesInicio, mesFim) {
+  const meses = []
+  let atual = `${mesInicio}-01`
+  const limite = `${mesFim}-01`
+  let protecao = 0
+  while (atual <= limite && protecao < 240) {
+    meses.push(atual.substring(0, 7))
+    atual = addMonthsISO(atual, 1)
+    protecao++
+  }
+  return meses
+}
+
+const MESES_ABREV = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+
+// 'YYYY-MM' -> 'jul/26'
+export function formatMesLabel(anoMes) {
+  const [ano, mes] = anoMes.split('-').map(Number)
+  return `${MESES_ABREV[mes - 1]}/${String(ano).substring(2)}`
+}
+
 // Soma N meses a uma data 'YYYY-MM-DD', ajustando para o último dia do mês quando
 // o dia original não existir no mês de destino (ex: 31/01 + 1 mês -> 28 ou 29/02).
 export function addMonthsISO(dateStr, meses) {
