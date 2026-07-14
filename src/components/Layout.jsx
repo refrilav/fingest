@@ -10,6 +10,7 @@ import {
   Truck,
   Wallet,
   LogOut,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { useAuth } from '../lib/AuthContext'
 
@@ -18,6 +19,7 @@ const navItems = [
   { to: '/contas-a-pagar', label: 'Contas a Pagar', icon: ArrowUpCircle },
   { to: '/contas-a-receber', label: 'Contas a Receber', icon: ArrowDownCircle },
   { to: '/conciliacao', label: 'Conciliação Bancária', icon: Landmark },
+  { to: '/transferencias', label: 'Transferências', icon: ArrowLeftRight },
   { to: '/relatorios', label: 'Relatórios / DRE', icon: FileBarChart },
   { to: '/categorias', label: 'Categorias', icon: Tags },
   { to: '/fornecedores', label: 'Fornecedores', icon: Truck },

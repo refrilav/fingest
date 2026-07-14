@@ -11,6 +11,7 @@ import Fornecedores from './pages/Fornecedores'
 import Clientes from './pages/Clientes'
 import ContasBancarias from './pages/ContasBancarias'
 import ImportarPessoas from './pages/ImportarPessoas'
+import Transferencias from './pages/Transferencias'
 
 function RotaProtegida({ children }) {
   const { session, loading } = useAuth()
@@ -43,6 +44,7 @@ function Rotas() {
         <Route path="clientes/importar" element={<ImportarPessoas tipo="clientes" />} />
         <Route path="fornecedores/importar" element={<ImportarPessoas tipo="fornecedores" />} />
         <Route path="contas-bancarias" element={<ContasBancarias />} />
+        <Route path="transferencias" element={<Transferencias />} />
       </Route>
     </Routes>
   )

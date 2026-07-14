@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatCurrencyBRL, formatDateBR, todayISO, isOverdue, getRangeMes, mesAtualISO } from '../lib/format'
+import { calcularSaldosContas } from '../lib/saldo'
 import { ArrowUpCircle, ArrowDownCircle, AlertTriangle, Wallet } from 'lucide-react'
 
 export default function Dashboard() {
@@ -28,15 +29,15 @@ export default function Dashboard() {
         queryProxReceber = queryProxReceber.gte('data_vencimento', inicio).lte('data_vencimento', fim)
       }
 
-      const [contas, aPagarAberto, aReceberAberto, prox5Pagar, prox5Receber] = await Promise.all([
-        supabase.from('contas_bancarias').select('saldo_inicial').eq('ativo', true),
+      const [saldosResult, aPagarAberto, aReceberAberto, prox5Pagar, prox5Receber] = await Promise.all([
+        calcularSaldosContas(),
         queryPagar.range(0, 9999),
         queryReceber.range(0, 9999),
         queryProxPagar.limit(5),
         queryProxReceber.limit(5),
       ])
 
-      const saldoContas = (contas.data || []).reduce((acc, c) => acc + Number(c.saldo_inicial), 0)
+      const saldoContas = Object.values(saldosResult.saldos).reduce((acc, v) => acc + v, 0)
       const totalPagar = (aPagarAberto.data || []).reduce((acc, l) => acc + Number(l.valor), 0)
       const totalReceber = (aReceberAberto.data || []).reduce((acc, l) => acc + Number(l.valor), 0)
       const vencidosPagar = (aPagarAberto.data || []).filter((l) => isOverdue(l.data_vencimento, hoje)).length

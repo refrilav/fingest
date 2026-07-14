@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Plus, Trash2, Wallet } from 'lucide-react'
+import { calcularSaldosContas } from '../lib/saldo'
+import { Plus, Trash2, Wallet, ArrowLeftRight } from 'lucide-react'
 import { formatCurrencyBRL } from '../lib/format'
 
 const CAMPOS_VAZIOS = { nome: '', banco: '', agencia: '', numero_conta: '', saldo_inicial: '0' }
 
 export default function ContasBancarias() {
   const [lista, setLista] = useState([])
+  const [saldos, setSaldos] = useState({})
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
   const [form, setForm] = useState(CAMPOS_VAZIOS)
@@ -14,14 +17,13 @@ export default function ContasBancarias() {
 
   async function carregar() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('contas_bancarias')
-      .select('*')
-      .eq('ativo', true)
-      .order('nome')
-      .range(0, 9999)
+    const [{ data, error }, { saldos: novosSaldos }] = await Promise.all([
+      supabase.from('contas_bancarias').select('*').eq('ativo', true).order('nome').range(0, 9999),
+      calcularSaldosContas(),
+    ])
     if (error) setErro(error.message)
     else setLista(data)
+    setSaldos(novosSaldos)
     setLoading(false)
   }
 
@@ -62,15 +64,23 @@ export default function ContasBancarias() {
     <div className="max-w-3xl">
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-2xl font-bold text-gray-900">Contas Bancárias</h2>
-        <button
-          onClick={() => setMostrarForm((v) => !v)}
-          className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700"
-        >
-          <Plus size={16} /> Nova conta
-        </button>
+        <div className="flex gap-2">
+          <Link
+            to="/transferencias"
+            className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-200"
+          >
+            <ArrowLeftRight size={16} /> Transferências
+          </Link>
+          <button
+            onClick={() => setMostrarForm((v) => !v)}
+            className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700"
+          >
+            <Plus size={16} /> Nova conta
+          </button>
+        </div>
       </div>
       <p className="text-gray-500 text-sm mb-6">
-        Base para a conciliação bancária (importação de OFX) na próxima fase.
+        Saldo atual = saldo inicial + lançamentos pagos nessa conta + transferências.
       </p>
 
       {erro && <div className="mb-4 rounded-lg bg-red-50 text-red-700 text-sm px-4 py-2">{erro}</div>}
@@ -137,7 +147,12 @@ export default function ContasBancarias() {
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <span className="text-sm text-gray-600">{formatCurrencyBRL(c.saldo_inicial)}</span>
+                <div className="text-right">
+                  <span className="block text-sm font-semibold text-gray-800">
+                    {formatCurrencyBRL(saldos[c.id] ?? c.saldo_inicial)}
+                  </span>
+                  <span className="block text-[11px] text-gray-400">saldo atual</span>
+                </div>
                 <button onClick={() => inativar(c.id)} className="text-gray-400 hover:text-red-600 p-1 rounded">
                   <Trash2 size={16} />
                 </button>
