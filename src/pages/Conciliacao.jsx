@@ -155,6 +155,7 @@ export default function Conciliacao() {
           data_pagamento: transacao.data,
           juros: ajuste.juros || 0,
           desconto: ajuste.desconto || 0,
+          conta_bancaria_id: contaId,
         })
         .eq('id', lancamentoId),
       supabase
@@ -226,6 +227,7 @@ export default function Conciliacao() {
       categoria_id: novoLancamento.categoria_id || null,
       centro_custo_id: novoLancamento.centro_custo_id || null,
       [campoPessoa]: novoLancamento.pessoa_id || null,
+      conta_bancaria_id: contaId,
     }
 
     const { data: novo, error: erroInsert } = await supabase

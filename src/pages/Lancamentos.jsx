@@ -28,11 +28,14 @@ export default function Lancamentos({ tipo }) {
   const [categorias, setCategorias] = useState([])
   const [centros, setCentros] = useState([])
   const [equipamentos, setEquipamentos] = useState([])
+  const [contasBancarias, setContasBancarias] = useState([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
   const [form, setForm] = useState(CAMPOS_VAZIOS)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [filtroStatus, setFiltroStatus] = useState('todos')
+  const [pagandoId, setPagandoId] = useState(null)
+  const [contaEscolhida, setContaEscolhida] = useState('')
 
   const tabelaPessoa = tipo === 'pagar' ? 'fornecedores' : 'clientes'
   const campoPessoa = tipo === 'pagar' ? 'fornecedor_id' : 'cliente_id'
@@ -41,10 +44,10 @@ export default function Lancamentos({ tipo }) {
 
   async function carregar() {
     setLoading(true)
-    const [lanc, cats, cent, equips] = await Promise.all([
+    const [lanc, cats, cent, equips, contas] = await Promise.all([
       supabase
         .from('lancamentos')
-        .select('*, categorias(nome), centros_de_custo(nome), fornecedores(nome), clientes(nome), equipamentos(nome)')
+        .select('*, categorias(nome), centros_de_custo(nome), fornecedores(nome), clientes(nome), equipamentos(nome), contas_bancarias(nome)')
         .eq('tipo', tipo)
         .order('data_vencimento')
         .range(0, 9999),
@@ -53,6 +56,7 @@ export default function Lancamentos({ tipo }) {
       tipo === 'receber'
         ? supabase.from('equipamentos').select('*').eq('ativo', true).order('nome').range(0, 9999)
         : Promise.resolve({ data: [] }),
+      supabase.from('contas_bancarias').select('*').eq('ativo', true).order('nome').range(0, 9999),
     ])
 
     if (lanc.error) setErro(lanc.error.message)
@@ -60,6 +64,7 @@ export default function Lancamentos({ tipo }) {
     setCategorias(cats.data || [])
     setCentros(cent.data || [])
     setEquipamentos(equips.data || [])
+    setContasBancarias(contas.data || [])
     setLoading(false)
   }
 
@@ -154,7 +159,16 @@ export default function Lancamentos({ tipo }) {
     carregar()
   }
 
-  async function marcarComoPago(item) {
+  function abrirPagamento(item) {
+    setPagandoId(item.id)
+    setContaEscolhida(contasBancarias.length > 0 ? contasBancarias[0].id : '')
+  }
+
+  async function confirmarPagamento(item) {
+    if (!contaEscolhida) {
+      setErro('Selecione de qual conta saiu/entrou o valor.')
+      return
+    }
     const desconto = Number(item.desconto) || 0
     const juros = Number(item.juros) || 0
     const { error } = await supabase
@@ -163,12 +177,14 @@ export default function Lancamentos({ tipo }) {
         status: 'pago',
         valor_pago: Number(item.valor) - desconto + juros,
         data_pagamento: todayISO(),
+        conta_bancaria_id: contaEscolhida,
       })
       .eq('id', item.id)
     if (error) {
       setErro(error.message)
       return
     }
+    setPagandoId(null)
     carregar()
   }
 
@@ -400,53 +416,86 @@ export default function Lancamentos({ tipo }) {
             const vencido = item.status === 'aberto' && isOverdue(item.data_vencimento)
             const pessoaNome = tipo === 'pagar' ? item.fornecedores?.nome : item.clientes?.nome
             return (
-              <li key={item.id} className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{item.descricao}</p>
-                  <p className="text-xs text-gray-500">
-                    Venc: {formatDateBR(item.data_vencimento)}
-                    {item.categorias?.nome ? ` · ${item.categorias.nome}` : ''}
-                    {item.equipamentos?.nome ? ` · ${item.equipamentos.nome}` : ''}
-                    {pessoaNome ? ` · ${pessoaNome}` : ''}
-                  </p>
+              <li key={item.id} className="px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{item.descricao}</p>
+                    <p className="text-xs text-gray-500">
+                      Venc: {formatDateBR(item.data_vencimento)}
+                      {item.categorias?.nome ? ` · ${item.categorias.nome}` : ''}
+                      {item.equipamentos?.nome ? ` · ${item.equipamentos.nome}` : ''}
+                      {pessoaNome ? ` · ${pessoaNome}` : ''}
+                      {item.status === 'pago' && item.contas_bancarias?.nome ? ` · ${item.contas_bancarias.nome}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {item.status === 'pago' && Math.abs(Number(item.valor_pago) - Number(item.valor)) > 0.005 ? (
+                      <div className="text-right">
+                        <span className="text-sm font-medium text-gray-700 line-through decoration-gray-300">
+                          {formatCurrencyBRL(item.valor)}
+                        </span>
+                        <span className="block text-sm font-semibold text-gray-900">
+                          {formatCurrencyBRL(item.valor_pago)}
+                        </span>
+                        <span className="block text-[11px] text-gray-400">
+                          {Number(item.valor_pago) > Number(item.valor)
+                            ? `+${formatCurrencyBRL(Number(item.valor_pago) - Number(item.valor))} juros/taxa`
+                            : `-${formatCurrencyBRL(Number(item.valor) - Number(item.valor_pago))} desconto`}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-sm font-medium text-gray-700">{formatCurrencyBRL(item.valor)}</span>
+                    )}
+                    <StatusBadge status={item.status} vencido={vencido} />
+                    {item.status === 'aberto' && (
+                      <button
+                        onClick={() => abrirPagamento(item)}
+                        title={tipo === 'pagar' ? 'Marcar como pago' : 'Marcar como recebido'}
+                        className="text-green-600 hover:bg-green-50 p-1 rounded"
+                      >
+                        <CheckCircle2 size={18} />
+                      </button>
+                    )}
+                    {item.status === 'aberto' && (
+                      <button onClick={() => cancelar(item)} className="text-gray-400 hover:text-orange-500 p-1 rounded">
+                        <X size={16} />
+                      </button>
+                    )}
+                    <button onClick={() => excluir(item.id)} className="text-gray-400 hover:text-red-600 p-1 rounded">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  {item.status === 'pago' && Math.abs(Number(item.valor_pago) - Number(item.valor)) > 0.005 ? (
-                    <div className="text-right">
-                      <span className="text-sm font-medium text-gray-700 line-through decoration-gray-300">
-                        {formatCurrencyBRL(item.valor)}
-                      </span>
-                      <span className="block text-sm font-semibold text-gray-900">
-                        {formatCurrencyBRL(item.valor_pago)}
-                      </span>
-                      <span className="block text-[11px] text-gray-400">
-                        {Number(item.valor_pago) > Number(item.valor)
-                          ? `+${formatCurrencyBRL(Number(item.valor_pago) - Number(item.valor))} juros/taxa`
-                          : `-${formatCurrencyBRL(Number(item.valor) - Number(item.valor_pago))} desconto`}
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-sm font-medium text-gray-700">{formatCurrencyBRL(item.valor)}</span>
-                  )}
-                  <StatusBadge status={item.status} vencido={vencido} />
-                  {item.status === 'aberto' && (
-                    <button
-                      onClick={() => marcarComoPago(item)}
-                      title={tipo === 'pagar' ? 'Marcar como pago' : 'Marcar como recebido'}
-                      className="text-green-600 hover:bg-green-50 p-1 rounded"
+
+                {pagandoId === item.id && (
+                  <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+                    <span className="text-sm text-green-800 shrink-0">
+                      {tipo === 'pagar' ? 'Saiu de:' : 'Entrou em:'}
+                    </span>
+                    <select
+                      value={contaEscolhida}
+                      onChange={(e) => setContaEscolhida(e.target.value)}
+                      className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
                     >
-                      <CheckCircle2 size={18} />
+                      <option value="">Selecione a conta/caixa...</option>
+                      {contasBancarias.map((c) => (
+                        <option key={c.id} value={c.id}>{c.nome}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => setPagandoId(null)}
+                      className="px-3 py-1.5 text-sm text-gray-500"
+                    >
+                      Cancelar
                     </button>
-                  )}
-                  {item.status === 'aberto' && (
-                    <button onClick={() => cancelar(item)} className="text-gray-400 hover:text-orange-500 p-1 rounded">
-                      <X size={16} />
+                    <button
+                      onClick={() => confirmarPagamento(item)}
+                      className="flex items-center gap-1 rounded-lg bg-green-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-green-700"
+                    >
+                      <CheckCircle2 size={14} /> Confirmar
                     </button>
-                  )}
-                  <button onClick={() => excluir(item.id)} className="text-gray-400 hover:text-red-600 p-1 rounded">
-                    <Trash2 size={16} />
-                  </button>
-                </div>
+                  </div>
+                )}
               </li>
             )
           })}
