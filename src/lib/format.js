@@ -71,6 +71,20 @@ export function isOverdue(dueDateStr, referenceDateStr = todayISO()) {
   return dueDateStr.substring(0, 10) < referenceDateStr.substring(0, 10)
 }
 
+// Recebe um mês no formato 'YYYY-MM' e devolve o primeiro e o último dia desse mês,
+// como strings 'YYYY-MM-DD'. Útil para filtrar lançamentos por período.
+export function getRangeMes(anoMes) {
+  const [year, month] = anoMes.split('-').map(Number)
+  const inicio = `${anoMes}-01`
+  const ultimoDia = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const fim = `${anoMes}-${String(ultimoDia).padStart(2, '0')}`
+  return { inicio, fim }
+}
+
+export function mesAtualISO() {
+  return todayISO().substring(0, 7) // 'YYYY-MM'
+}
+
 // Soma N meses a uma data 'YYYY-MM-DD', ajustando para o último dia do mês quando
 // o dia original não existir no mês de destino (ex: 31/01 + 1 mês -> 28 ou 29/02).
 export function addMonthsISO(dateStr, meses) {

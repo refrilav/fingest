@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { formatDateBR, formatCurrencyBRL, todayISO, isOverdue, addMonthsISO } from '../lib/format'
+import { formatDateBR, formatCurrencyBRL, todayISO, isOverdue, addMonthsISO, getRangeMes, mesAtualISO } from '../lib/format'
 import { Plus, Trash2, CheckCircle2, X, Repeat, Pencil } from 'lucide-react'
 import BuscaPessoa from '../components/BuscaPessoa'
 
@@ -36,6 +36,7 @@ export default function Lancamentos({ tipo }) {
   const [form, setForm] = useState(CAMPOS_VAZIOS)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [filtroStatus, setFiltroStatus] = useState('todos')
+  const [periodo, setPeriodo] = useState(mesAtualISO()) // 'YYYY-MM' ou 'todos'
   const [pagandoId, setPagandoId] = useState(null)
   const [contaEscolhida, setContaEscolhida] = useState('')
   const [editandoId, setEditandoId] = useState(null)
@@ -283,14 +284,20 @@ export default function Lancamentos({ tipo }) {
   }
 
   const listaFiltrada = lista.filter((item) => {
+    if (periodo !== 'todos') {
+      const { inicio, fim } = getRangeMes(periodo)
+      const venc = (item.data_vencimento || '').substring(0, 10)
+      if (venc < inicio || venc > fim) return false
+    }
     if (filtroStatus === 'todos') return true
     if (filtroStatus === 'vencido') return item.status === 'aberto' && isOverdue(item.data_vencimento)
     return item.status === filtroStatus
   })
 
-  const totalAberto = lista
-    .filter((i) => i.status === 'aberto')
-    .reduce((acc, i) => acc + Number(i.valor), 0)
+  const totalFiltrado = listaFiltrada.reduce(
+    (acc, i) => acc + (i.status === 'pago' ? Number(i.valor_pago) : Number(i.valor)),
+    0
+  )
 
   const itemEditando = editandoId ? lista.find((l) => l.id === editandoId) : null
   const editandoItemPago = itemEditando?.status === 'pago'
@@ -314,7 +321,8 @@ export default function Lancamentos({ tipo }) {
         </button>
       </div>
       <p className="text-gray-500 text-sm mb-4">
-        Total em aberto: <span className="font-semibold text-gray-700">{formatCurrencyBRL(totalAberto)}</span>
+        Total {filtroStatus === 'todos' ? '' : `(${filtroStatus})`}:{' '}
+        <span className="font-semibold text-gray-700">{formatCurrencyBRL(totalFiltrado)}</span>
       </p>
 
       {erro && <div className="mb-4 rounded-lg bg-red-50 text-red-700 text-sm px-4 py-2">{erro}</div>}
@@ -505,18 +513,37 @@ export default function Lancamentos({ tipo }) {
         </form>
       )}
 
-      <div className="flex gap-2 mb-3">
-        {['todos', 'aberto', 'vencido', 'pago', 'cancelado'].map((s) => (
-          <button
-            key={s}
-            onClick={() => setFiltroStatus(s)}
-            className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${
-              filtroStatus === s ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'
-            }`}
-          >
-            {s}
-          </button>
-        ))}
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="flex gap-2">
+          {['todos', 'aberto', 'vencido', 'pago', 'cancelado'].map((s) => (
+            <button
+              key={s}
+              onClick={() => setFiltroStatus(s)}
+              className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${
+                filtroStatus === s ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="month"
+            value={periodo === 'todos' ? '' : periodo}
+            onChange={(e) => setPeriodo(e.target.value || mesAtualISO())}
+            disabled={periodo === 'todos'}
+            className="rounded-lg border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-400"
+          />
+          <label className="flex items-center gap-1 text-xs text-gray-500">
+            <input
+              type="checkbox"
+              checked={periodo === 'todos'}
+              onChange={(e) => setPeriodo(e.target.checked ? 'todos' : mesAtualISO())}
+            />
+            Todos os períodos
+          </label>
+        </div>
       </div>
 
       {loading ? (
