@@ -13,6 +13,7 @@ import ContasBancarias from './pages/ContasBancarias'
 import ImportarPessoas from './pages/ImportarPessoas'
 import Transferencias from './pages/Transferencias'
 import AjustesSaldo from './pages/AjustesSaldo'
+import ExtratoConta from './pages/ExtratoConta'
 
 function RotaProtegida({ children }) {
   const { session, loading } = useAuth()
@@ -47,6 +48,7 @@ function Rotas() {
         <Route path="contas-bancarias" element={<ContasBancarias />} />
         <Route path="transferencias" element={<Transferencias />} />
         <Route path="ajustes-saldo" element={<AjustesSaldo />} />
+        <Route path="contas-bancarias/:id" element={<ExtratoConta />} />
       </Route>
     </Routes>
   )

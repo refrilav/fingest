@@ -153,12 +153,12 @@ export default function ContasBancarias() {
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <span className="block text-sm font-semibold text-gray-800">
+                <Link to={`/contas-bancarias/${c.id}`} className="text-right group cursor-pointer">
+                  <span className="block text-sm font-semibold text-gray-800 group-hover:text-primary-600 group-hover:underline">
                     {formatCurrencyBRL(saldos[c.id] ?? c.saldo_inicial)}
                   </span>
-                  <span className="block text-[11px] text-gray-400">saldo atual</span>
-                </div>
+                  <span className="block text-[11px] text-gray-400 group-hover:text-primary-500">ver extrato</span>
+                </Link>
                 <button onClick={() => inativar(c.id)} className="text-gray-400 hover:text-red-600 p-1 rounded">
                   <Trash2 size={16} />
                 </button>
