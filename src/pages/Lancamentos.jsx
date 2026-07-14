@@ -226,6 +226,7 @@ export default function Lancamentos({ tipo }) {
     })
     setEditandoId(item.id)
     setMostrarForm(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function cancelarFormulario() {
