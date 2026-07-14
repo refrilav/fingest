@@ -10,6 +10,7 @@ export default function Categorias() {
 
   const [novoNome, setNovoNome] = useState('')
   const [novoTipo, setNovoTipo] = useState('despesa')
+  const [novaNatureza, setNovaNatureza] = useState('operacional')
   const [novoEquipamento, setNovoEquipamento] = useState('')
 
   const [editandoId, setEditandoId] = useState(null)
@@ -35,12 +36,25 @@ export default function Categorias() {
   async function adicionarCategoria(e) {
     e.preventDefault()
     if (!novoNome.trim()) return
-    const { error } = await supabase.from('categorias').insert({ nome: novoNome.trim(), tipo: novoTipo })
+    const { error } = await supabase
+      .from('categorias')
+      .insert({ nome: novoNome.trim(), tipo: novoTipo, natureza: novaNatureza })
     if (error) {
       setErro(error.message)
       return
     }
     setNovoNome('')
+    setNovaNatureza('operacional')
+    carregar()
+  }
+
+  async function alternarNatureza(id, naturezaAtual) {
+    const nova = naturezaAtual === 'operacional' ? 'nao_operacional' : 'operacional'
+    const { error } = await supabase.from('categorias').update({ natureza: nova }).eq('id', id)
+    if (error) {
+      setErro(error.message)
+      return
+    }
     carregar()
   }
 
@@ -104,7 +118,7 @@ export default function Categorias() {
 
       {erro && <div className="mb-4 rounded-lg bg-red-50 text-red-700 text-sm px-4 py-2">{erro}</div>}
 
-      <form onSubmit={adicionarCategoria} className="flex gap-2 mb-6">
+      <form onSubmit={adicionarCategoria} className="flex gap-2 mb-2 items-center">
         <input
           type="text"
           placeholder="Nome da categoria"
@@ -127,6 +141,14 @@ export default function Categorias() {
           <Plus size={16} /> Adicionar
         </button>
       </form>
+      <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-6">
+        <input
+          type="checkbox"
+          checked={novaNatureza === 'nao_operacional'}
+          onChange={(e) => setNovaNatureza(e.target.checked ? 'nao_operacional' : 'operacional')}
+        />
+        Não operacional (ex: empréstimos, aportes — fica separado do resultado operacional no DRE)
+      </label>
 
       {loading ? (
         <p className="text-gray-400 text-sm">Carregando...</p>
@@ -144,6 +166,7 @@ export default function Categorias() {
             salvarEdicao={salvarEdicao}
             cancelarEdicao={cancelarEdicao}
             excluir={(id) => excluir('categorias', id, 'Excluir esta categoria? Lançamentos vinculados perdem a categoria.')}
+            alternarNatureza={alternarNatureza}
           />
           <ListaColuna
             titulo="Despesas"
@@ -157,6 +180,7 @@ export default function Categorias() {
             salvarEdicao={salvarEdicao}
             cancelarEdicao={cancelarEdicao}
             excluir={(id) => excluir('categorias', id, 'Excluir esta categoria? Lançamentos vinculados perdem a categoria.')}
+            alternarNatureza={alternarNatureza}
           />
         </div>
       )}
@@ -219,6 +243,7 @@ function ListaColuna({
   salvarEdicao,
   cancelarEdicao,
   excluir,
+  alternarNatureza,
 }) {
   return (
     <div>
@@ -247,7 +272,22 @@ function ListaColuna({
                 </>
               ) : (
                 <>
-                  <span className="text-sm text-gray-800">{item.nome}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-800">{item.nome}</span>
+                    {tabela === 'categorias' && (
+                      <button
+                        onClick={() => alternarNatureza(item.id, item.natureza)}
+                        title="Clique pra alternar entre operacional / não operacional"
+                        className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                          item.natureza === 'nao_operacional'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-gray-100 text-gray-400'
+                        }`}
+                      >
+                        {item.natureza === 'nao_operacional' ? 'não operacional' : 'operacional'}
+                      </button>
+                    )}
+                  </div>
                   <div className="flex gap-1">
                     <button
                       onClick={() => iniciarEdicao(tabela, item)}

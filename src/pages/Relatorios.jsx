@@ -16,8 +16,10 @@ export default function Relatorios() {
   const [mesFim, setMesFim] = useState(mesAtualISO())
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
-  const [receitas, setReceitas] = useState({})
-  const [despesas, setDespesas] = useState({})
+  const [receitasOp, setReceitasOp] = useState({})
+  const [despesasOp, setDespesasOp] = useState({})
+  const [receitasNaoOp, setReceitasNaoOp] = useState({})
+  const [despesasNaoOp, setDespesasNaoOp] = useState({})
   const [totalPorMes, setTotalPorMes] = useState({})
 
   const meses = gerarIntervaloMeses(mesInicio, mesFim)
@@ -32,7 +34,7 @@ export default function Relatorios() {
 
       const { data, error } = await supabase
         .from('lancamentos')
-        .select('tipo, valor, data_competencia, categoria_id, categorias(nome)')
+        .select('tipo, valor, data_competencia, categoria_id, categorias(nome, natureza)')
         .neq('status', 'cancelado')
         .gte('data_competencia', inicio)
         .lte('data_competencia', fim)
@@ -44,10 +46,12 @@ export default function Relatorios() {
         return
       }
 
-      const novasReceitas = {}
-      const novasDespesas = {}
+      const novasReceitasOp = {}
+      const novasDespesasOp = {}
+      const novasReceitasNaoOp = {}
+      const novasDespesasNaoOp = {}
       const novoTotalPorMes = {}
-      meses.forEach((m) => (novoTotalPorMes[m] = { receita: 0, despesa: 0 }))
+      meses.forEach((m) => (novoTotalPorMes[m] = { receitaOp: 0, despesaOp: 0, receitaNaoOp: 0, despesaNaoOp: 0 }))
 
       for (const l of data) {
         const mes = (l.data_competencia || '').substring(0, 7)
@@ -55,17 +59,27 @@ export default function Relatorios() {
 
         const catNome = l.categorias?.nome || '(Sem categoria)'
         const catId = l.categoria_id || `sem_categoria_${l.tipo}`
-        const alvo = l.tipo === 'receber' ? novasReceitas : novasDespesas
+        const naoOperacional = l.categorias?.natureza === 'nao_operacional'
+        const isReceita = l.tipo === 'receber'
+
+        let alvo
+        if (isReceita && !naoOperacional) alvo = novasReceitasOp
+        else if (isReceita && naoOperacional) alvo = novasReceitasNaoOp
+        else if (!isReceita && !naoOperacional) alvo = novasDespesasOp
+        else alvo = novasDespesasNaoOp
 
         if (!alvo[catId]) alvo[catId] = { nome: catNome, porMes: {}, total: 0 }
         alvo[catId].porMes[mes] = (alvo[catId].porMes[mes] || 0) + Number(l.valor)
         alvo[catId].total += Number(l.valor)
 
-        novoTotalPorMes[mes][l.tipo === 'receber' ? 'receita' : 'despesa'] += Number(l.valor)
+        const chave = isReceita ? (naoOperacional ? 'receitaNaoOp' : 'receitaOp') : naoOperacional ? 'despesaNaoOp' : 'despesaOp'
+        novoTotalPorMes[mes][chave] += Number(l.valor)
       }
 
-      setReceitas(novasReceitas)
-      setDespesas(novasDespesas)
+      setReceitasOp(novasReceitasOp)
+      setDespesasOp(novasDespesasOp)
+      setReceitasNaoOp(novasReceitasNaoOp)
+      setDespesasNaoOp(novasDespesasNaoOp)
       setTotalPorMes(novoTotalPorMes)
       setLoading(false)
     }
@@ -87,9 +101,14 @@ export default function Relatorios() {
     }
   }
 
-  const totalReceitaGeral = Object.values(totalPorMes).reduce((acc, m) => acc + m.receita, 0)
-  const totalDespesaGeral = Object.values(totalPorMes).reduce((acc, m) => acc + m.despesa, 0)
-  const resultadoGeral = totalReceitaGeral - totalDespesaGeral
+  const totalReceitaOp = Object.values(totalPorMes).reduce((acc, m) => acc + m.receitaOp, 0)
+  const totalDespesaOp = Object.values(totalPorMes).reduce((acc, m) => acc + m.despesaOp, 0)
+  const totalReceitaNaoOp = Object.values(totalPorMes).reduce((acc, m) => acc + m.receitaNaoOp, 0)
+  const totalDespesaNaoOp = Object.values(totalPorMes).reduce((acc, m) => acc + m.despesaNaoOp, 0)
+  const resultadoOperacional = totalReceitaOp - totalDespesaOp
+  const resultadoNaoOperacional = totalReceitaNaoOp - totalDespesaNaoOp
+  const resultadoGeral = resultadoOperacional + resultadoNaoOperacional
+  const baseReceita = totalReceitaOp // análise vertical usa só a receita operacional como base
 
   function linhasOrdenadas(mapa) {
     return Object.values(mapa).sort((a, b) => b.total - a.total)
@@ -100,35 +119,41 @@ export default function Relatorios() {
     const header = ['Categoria', ...meses.map(formatMesLabel), 'Total', '% Receita']
     linhas.push(header)
 
-    linhas.push(['RECEITAS'])
-    linhasOrdenadas(receitas).forEach((r) => {
-      linhas.push([
-        r.nome,
-        ...meses.map((m) => r.porMes[m] || 0),
-        r.total,
-        totalReceitaGeral ? r.total / totalReceitaGeral : 0,
-      ])
+    linhas.push(['RECEITAS OPERACIONAIS'])
+    linhasOrdenadas(receitasOp).forEach((r) => {
+      linhas.push([r.nome, ...meses.map((m) => r.porMes[m] || 0), r.total, baseReceita ? r.total / baseReceita : 0])
     })
-    linhas.push(['Total Receitas', ...meses.map((m) => totalPorMes[m]?.receita || 0), totalReceitaGeral, 1])
+    linhas.push(['Total Receitas Operacionais', ...meses.map((m) => totalPorMes[m]?.receitaOp || 0), totalReceitaOp, 1])
     linhas.push([])
 
-    linhas.push(['DESPESAS'])
-    linhasOrdenadas(despesas).forEach((d) => {
-      linhas.push([
-        d.nome,
-        ...meses.map((m) => d.porMes[m] || 0),
-        d.total,
-        totalReceitaGeral ? d.total / totalReceitaGeral : 0,
-      ])
+    linhas.push(['DESPESAS OPERACIONAIS'])
+    linhasOrdenadas(despesasOp).forEach((d) => {
+      linhas.push([d.nome, ...meses.map((m) => d.porMes[m] || 0), d.total, baseReceita ? d.total / baseReceita : 0])
     })
-    linhas.push(['Total Despesas', ...meses.map((m) => totalPorMes[m]?.despesa || 0), totalDespesaGeral, totalReceitaGeral ? totalDespesaGeral / totalReceitaGeral : 0])
+    linhas.push(['Total Despesas Operacionais', ...meses.map((m) => totalPorMes[m]?.despesaOp || 0), totalDespesaOp, baseReceita ? totalDespesaOp / baseReceita : 0])
     linhas.push([])
+
+    linhas.push(['RESULTADO OPERACIONAL', ...meses.map((m) => (totalPorMes[m]?.receitaOp || 0) - (totalPorMes[m]?.despesaOp || 0)), resultadoOperacional, baseReceita ? resultadoOperacional / baseReceita : 0])
+    linhas.push([])
+
+    const temNaoOperacional = Object.keys(receitasNaoOp).length > 0 || Object.keys(despesasNaoOp).length > 0
+    if (temNaoOperacional) {
+      linhas.push(['NÃO OPERACIONAL (empréstimos, aportes, etc.)'])
+      linhasOrdenadas(receitasNaoOp).forEach((r) => {
+        linhas.push([r.nome, ...meses.map((m) => r.porMes[m] || 0), r.total, baseReceita ? r.total / baseReceita : 0])
+      })
+      linhasOrdenadas(despesasNaoOp).forEach((d) => {
+        linhas.push([d.nome, ...meses.map((m) => -(d.porMes[m] || 0)), -d.total, baseReceita ? -d.total / baseReceita : 0])
+      })
+      linhas.push(['Resultado Não Operacional', ...meses.map((m) => (totalPorMes[m]?.receitaNaoOp || 0) - (totalPorMes[m]?.despesaNaoOp || 0)), resultadoNaoOperacional, baseReceita ? resultadoNaoOperacional / baseReceita : 0])
+      linhas.push([])
+    }
 
     linhas.push([
       'RESULTADO DO PERÍODO',
-      ...meses.map((m) => (totalPorMes[m]?.receita || 0) - (totalPorMes[m]?.despesa || 0)),
+      ...meses.map((m) => (totalPorMes[m]?.receitaOp || 0) - (totalPorMes[m]?.despesaOp || 0) + (totalPorMes[m]?.receitaNaoOp || 0) - (totalPorMes[m]?.despesaNaoOp || 0)),
       resultadoGeral,
-      totalReceitaGeral ? resultadoGeral / totalReceitaGeral : 0,
+      baseReceita ? resultadoGeral / baseReceita : 0,
     ])
 
     const ws = XLSX.utils.aoa_to_sheet(linhas)
@@ -203,37 +228,89 @@ export default function Relatorios() {
               </tr>
             </thead>
             <tbody>
-              <LinhaSecao texto="RECEITAS" />
-              {linhasOrdenadas(receitas).map((r, i) => (
-                <LinhaCategoria key={i} nome={r.nome} porMes={r.porMes} total={r.total} meses={meses} totalReceitaGeral={totalReceitaGeral} />
+              <LinhaSecao texto="RECEITAS OPERACIONAIS" />
+              {linhasOrdenadas(receitasOp).map((r, i) => (
+                <LinhaCategoria key={i} nome={r.nome} porMes={r.porMes} total={r.total} meses={meses} totalReceitaGeral={baseReceita} />
               ))}
               <LinhaSubtotal
-                texto="Total Receitas"
-                porMes={Object.fromEntries(meses.map((m) => [m, totalPorMes[m]?.receita || 0]))}
-                total={totalReceitaGeral}
+                texto="Total Receitas Operacionais"
+                porMes={Object.fromEntries(meses.map((m) => [m, totalPorMes[m]?.receitaOp || 0]))}
+                total={totalReceitaOp}
                 meses={meses}
-                totalReceitaGeral={totalReceitaGeral}
+                totalReceitaGeral={baseReceita}
               />
 
               <tr><td colSpan={meses.length + 3} className="py-2"></td></tr>
 
-              <LinhaSecao texto="DESPESAS" />
-              {linhasOrdenadas(despesas).map((d, i) => (
-                <LinhaCategoria key={i} nome={d.nome} porMes={d.porMes} total={d.total} meses={meses} totalReceitaGeral={totalReceitaGeral} negativo />
+              <LinhaSecao texto="DESPESAS OPERACIONAIS" />
+              {linhasOrdenadas(despesasOp).map((d, i) => (
+                <LinhaCategoria key={i} nome={d.nome} porMes={d.porMes} total={d.total} meses={meses} totalReceitaGeral={baseReceita} negativo />
               ))}
               <LinhaSubtotal
-                texto="Total Despesas"
-                porMes={Object.fromEntries(meses.map((m) => [m, totalPorMes[m]?.despesa || 0]))}
-                total={totalDespesaGeral}
+                texto="Total Despesas Operacionais"
+                porMes={Object.fromEntries(meses.map((m) => [m, totalPorMes[m]?.despesaOp || 0]))}
+                total={totalDespesaOp}
                 meses={meses}
-                totalReceitaGeral={totalReceitaGeral}
+                totalReceitaGeral={baseReceita}
                 negativo
               />
 
               <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold">
+                <td className="px-4 py-3 text-gray-900">Resultado Operacional</td>
+                {meses.map((m) => {
+                  const valor = (totalPorMes[m]?.receitaOp || 0) - (totalPorMes[m]?.despesaOp || 0)
+                  return (
+                    <td key={m} className={`px-3 py-3 text-right whitespace-nowrap ${valor < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                      {formatCurrencyBRL(valor)}
+                    </td>
+                  )
+                })}
+                <td className={`px-3 py-3 text-right whitespace-nowrap ${resultadoOperacional < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                  {formatCurrencyBRL(resultadoOperacional)}
+                </td>
+                <td className="px-3 py-3 text-right whitespace-nowrap text-gray-500">
+                  {baseReceita ? `${((resultadoOperacional / baseReceita) * 100).toFixed(1)}%` : '—'}
+                </td>
+              </tr>
+
+              {(Object.keys(receitasNaoOp).length > 0 || Object.keys(despesasNaoOp).length > 0) && (
+                <>
+                  <tr><td colSpan={meses.length + 3} className="py-2"></td></tr>
+                  <LinhaSecao texto="NÃO OPERACIONAL (empréstimos, aportes, etc.)" />
+                  {linhasOrdenadas(receitasNaoOp).map((r, i) => (
+                    <LinhaCategoria key={i} nome={r.nome} porMes={r.porMes} total={r.total} meses={meses} totalReceitaGeral={baseReceita} />
+                  ))}
+                  {linhasOrdenadas(despesasNaoOp).map((d, i) => (
+                    <LinhaCategoria key={i} nome={d.nome} porMes={d.porMes} total={d.total} meses={meses} totalReceitaGeral={baseReceita} negativo />
+                  ))}
+                  <tr className="border-t border-gray-200 bg-gray-50 font-semibold">
+                    <td className="px-4 py-2 text-gray-800">Resultado Não Operacional</td>
+                    {meses.map((m) => {
+                      const valor = (totalPorMes[m]?.receitaNaoOp || 0) - (totalPorMes[m]?.despesaNaoOp || 0)
+                      return (
+                        <td key={m} className={`px-3 py-2 text-right whitespace-nowrap ${valor < 0 ? 'text-red-600' : 'text-gray-800'}`}>
+                          {formatCurrencyBRL(valor)}
+                        </td>
+                      )
+                    })}
+                    <td className={`px-3 py-2 text-right whitespace-nowrap ${resultadoNaoOperacional < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                      {formatCurrencyBRL(resultadoNaoOperacional)}
+                    </td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap text-gray-500">
+                      {baseReceita ? `${((resultadoNaoOperacional / baseReceita) * 100).toFixed(1)}%` : '—'}
+                    </td>
+                  </tr>
+                </>
+              )}
+
+              <tr className="border-t-2 border-gray-400 bg-primary-50 font-bold">
                 <td className="px-4 py-3 text-gray-900">Resultado do Período</td>
                 {meses.map((m) => {
-                  const valor = (totalPorMes[m]?.receita || 0) - (totalPorMes[m]?.despesa || 0)
+                  const valor =
+                    (totalPorMes[m]?.receitaOp || 0) -
+                    (totalPorMes[m]?.despesaOp || 0) +
+                    (totalPorMes[m]?.receitaNaoOp || 0) -
+                    (totalPorMes[m]?.despesaNaoOp || 0)
                   return (
                     <td key={m} className={`px-3 py-3 text-right whitespace-nowrap ${valor < 0 ? 'text-red-600' : 'text-green-700'}`}>
                       {formatCurrencyBRL(valor)}
@@ -244,7 +321,7 @@ export default function Relatorios() {
                   {formatCurrencyBRL(resultadoGeral)}
                 </td>
                 <td className="px-3 py-3 text-right whitespace-nowrap text-gray-500">
-                  {totalReceitaGeral ? `${((resultadoGeral / totalReceitaGeral) * 100).toFixed(1)}%` : '—'}
+                  {baseReceita ? `${((resultadoGeral / baseReceita) * 100).toFixed(1)}%` : '—'}
                 </td>
               </tr>
             </tbody>
