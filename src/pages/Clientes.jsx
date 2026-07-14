@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Upload } from 'lucide-react'
 
 const CAMPOS_VAZIOS = { nome: '', documento: '', telefone: '', email: '', observacoes: '' }
 
@@ -61,12 +62,20 @@ export default function Clientes() {
     <div className="max-w-3xl">
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-2xl font-bold text-gray-900">Clientes</h2>
-        <button
-          onClick={() => setMostrarForm((v) => !v)}
-          className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700"
-        >
-          <Plus size={16} /> Novo cliente
-        </button>
+        <div className="flex gap-2">
+          <Link
+            to="/clientes/importar"
+            className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-200"
+          >
+            <Upload size={16} /> Importar planilha
+          </Link>
+          <button
+            onClick={() => setMostrarForm((v) => !v)}
+            className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700"
+          >
+            <Plus size={16} /> Novo cliente
+          </button>
+        </div>
       </div>
       <p className="text-gray-500 text-sm mb-6">Usados em contas a receber.</p>
 
