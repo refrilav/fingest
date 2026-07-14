@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { parseOfx } from '../lib/parseOfx'
 import { formatDateBR, formatCurrencyBRL } from '../lib/format'
-import { Upload, Landmark, Check, Link2, X, Plus } from 'lucide-react'
+import { Upload, Landmark, Check, Link2, X, Plus, AlertTriangle } from 'lucide-react'
 import BuscaPessoa from '../components/BuscaPessoa'
 
 export default function Conciliacao() {
@@ -15,6 +15,7 @@ export default function Conciliacao() {
   const [centros, setCentros] = useState([])
   const [criandoParaId, setCriandoParaId] = useState(null)
   const [novoLancamento, setNovoLancamento] = useState({})
+  const [ajustePendente, setAjustePendente] = useState(null) // { transacaoId, lancamento, diferenca, motivo }
   const [loading, setLoading] = useState(false)
   const [mensagem, setMensagem] = useState(null)
   const [erro, setErro] = useState(null)
@@ -128,6 +129,23 @@ export default function Conciliacao() {
     const lancamento = lancamentosAbertos[tipo].find((l) => l.id === lancamentoId)
     if (!lancamento) return
 
+    const diferenca = Number((Math.abs(Number(transacao.valor)) - Number(lancamento.valor)).toFixed(2))
+
+    if (Math.abs(diferenca) > 0.005) {
+      // valor pago é diferente do valor original do lançamento — pede pra classificar antes de gravar
+      setAjustePendente({
+        transacaoId: transacao.id,
+        lancamentoId,
+        diferenca,
+        motivo: diferenca > 0 ? 'juros' : 'desconto',
+      })
+      return
+    }
+
+    await finalizarVinculo(transacao, lancamentoId, { juros: 0, desconto: 0 })
+  }
+
+  async function finalizarVinculo(transacao, lancamentoId, ajuste) {
     const [r1, r2] = await Promise.all([
       supabase
         .from('lancamentos')
@@ -135,6 +153,8 @@ export default function Conciliacao() {
           status: 'pago',
           valor_pago: Math.abs(Number(transacao.valor)),
           data_pagamento: transacao.data,
+          juros: ajuste.juros || 0,
+          desconto: ajuste.desconto || 0,
         })
         .eq('id', lancamentoId),
       supabase
@@ -148,7 +168,21 @@ export default function Conciliacao() {
       return
     }
 
+    setAjustePendente(null)
     carregarTransacoesELancamentos(contaId)
+  }
+
+  async function confirmarAjuste() {
+    const { transacaoId, lancamentoId, diferenca, motivo } = ajustePendente
+    const transacao = transacoes.find((t) => t.id === transacaoId)
+    if (!transacao) return
+
+    const ajuste =
+      motivo === 'desconto'
+        ? { desconto: Math.abs(diferenca), juros: 0 }
+        : { juros: Math.abs(diferenca), desconto: 0 }
+
+    await finalizarVinculo(transacao, lancamentoId, ajuste)
   }
 
   async function marcarSemVinculo(transacaoId) {
@@ -311,6 +345,62 @@ export default function Conciliacao() {
                     <X size={14} /> Sem vínculo
                   </button>
                 </div>
+
+                {ajustePendente?.transacaoId === t.id && (
+                  <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <div className="flex items-start gap-2 mb-3">
+                      <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                      <p className="text-sm text-amber-800">
+                        O valor pago ({formatCurrencyBRL(Math.abs(Number(t.valor)))}) é diferente do valor original do
+                        lançamento. Diferença de <strong>{formatCurrencyBRL(Math.abs(ajustePendente.diferenca))}</strong>.
+                        O que é isso?
+                      </p>
+                    </div>
+                    <div className="flex gap-2 mb-3">
+                      {ajustePendente.diferenca > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setAjustePendente({ ...ajustePendente, motivo: 'juros' })}
+                          className={`flex-1 rounded-lg py-2 text-sm font-medium border ${
+                            ajustePendente.motivo === 'juros'
+                              ? 'bg-amber-600 text-white border-amber-600'
+                              : 'bg-white text-gray-600 border-gray-300'
+                          }`}
+                        >
+                          Juros / Multa / Tarifa
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setAjustePendente({ ...ajustePendente, motivo: 'desconto' })}
+                          className={`flex-1 rounded-lg py-2 text-sm font-medium border ${
+                            ajustePendente.motivo === 'desconto'
+                              ? 'bg-amber-600 text-white border-amber-600'
+                              : 'bg-white text-gray-600 border-gray-300'
+                          }`}
+                        >
+                          Desconto / Abatimento
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAjustePendente(null)}
+                        className="px-3 py-1.5 text-sm text-gray-500"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={confirmarAjuste}
+                        className="flex items-center gap-1 rounded-lg bg-amber-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-amber-700"
+                      >
+                        <Check size={14} /> Confirmar com esse ajuste
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {criandoParaId === t.id && (
                   <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3 grid grid-cols-2 gap-2">

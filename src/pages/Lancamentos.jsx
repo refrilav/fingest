@@ -17,6 +17,7 @@ const CAMPOS_VAZIOS = {
   observacoes: '',
   forma_pagamento: '',
   desconto: '',
+  juros: '',
   repeticao: 'unico', // 'unico' | 'parcelado' | 'recorrente'
   quantidade: '2',
 }
@@ -92,6 +93,7 @@ export default function Lancamentos({ tipo }) {
           descricao: form.descricao.trim(),
           valor: Number(form.valor),
           desconto: Number(form.desconto) || 0,
+          juros: Number(form.juros) || 0,
           data_vencimento: form.data_vencimento,
           data_competencia: form.data_competencia || form.data_vencimento,
         },
@@ -154,11 +156,12 @@ export default function Lancamentos({ tipo }) {
 
   async function marcarComoPago(item) {
     const desconto = Number(item.desconto) || 0
+    const juros = Number(item.juros) || 0
     const { error } = await supabase
       .from('lancamentos')
       .update({
         status: 'pago',
-        valor_pago: Number(item.valor) - desconto,
+        valor_pago: Number(item.valor) - desconto + juros,
         data_pagamento: todayISO(),
       })
       .eq('id', item.id)
@@ -349,6 +352,14 @@ export default function Lancamentos({ tipo }) {
             onChange={(e) => setForm({ ...form, desconto: e.target.value })}
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
+          <input
+            type="number"
+            step="0.01"
+            placeholder="Juros/multa (opcional)"
+            value={form.juros}
+            onChange={(e) => setForm({ ...form, juros: e.target.value })}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          />
           <textarea
             placeholder="Observações"
             value={form.observacoes}
@@ -400,7 +411,23 @@ export default function Lancamentos({ tipo }) {
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-gray-700">{formatCurrencyBRL(item.valor)}</span>
+                  {item.status === 'pago' && Math.abs(Number(item.valor_pago) - Number(item.valor)) > 0.005 ? (
+                    <div className="text-right">
+                      <span className="text-sm font-medium text-gray-700 line-through decoration-gray-300">
+                        {formatCurrencyBRL(item.valor)}
+                      </span>
+                      <span className="block text-sm font-semibold text-gray-900">
+                        {formatCurrencyBRL(item.valor_pago)}
+                      </span>
+                      <span className="block text-[11px] text-gray-400">
+                        {Number(item.valor_pago) > Number(item.valor)
+                          ? `+${formatCurrencyBRL(Number(item.valor_pago) - Number(item.valor))} juros/taxa`
+                          : `-${formatCurrencyBRL(Number(item.valor) - Number(item.valor_pago))} desconto`}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-sm font-medium text-gray-700">{formatCurrencyBRL(item.valor)}</span>
+                  )}
                   <StatusBadge status={item.status} vencido={vencido} />
                   {item.status === 'aberto' && (
                     <button
