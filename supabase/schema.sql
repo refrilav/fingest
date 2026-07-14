@@ -94,6 +94,8 @@ create table lancamentos (
 
   recorrente boolean not null default false,
   observacoes text,
+  forma_pagamento text, -- ex: Pix, Dinheiro, Cartão, Boleto
+  desconto numeric(14,2) not null default 0,
 
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),

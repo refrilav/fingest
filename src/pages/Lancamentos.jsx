@@ -13,6 +13,8 @@ const CAMPOS_VAZIOS = {
   fornecedor_id: '',
   cliente_id: '',
   observacoes: '',
+  forma_pagamento: '',
+  desconto: '',
 }
 
 // tipo: 'pagar' | 'receber'
@@ -75,6 +77,8 @@ export default function Lancamentos({ tipo }) {
       centro_custo_id: form.centro_custo_id || null,
       [campoPessoa]: form[campoPessoa] || null,
       observacoes: form.observacoes || null,
+      forma_pagamento: form.forma_pagamento || null,
+      desconto: Number(form.desconto) || 0,
     }
 
     const { error } = await supabase.from('lancamentos').insert(payload)
@@ -88,11 +92,12 @@ export default function Lancamentos({ tipo }) {
   }
 
   async function marcarComoPago(item) {
+    const desconto = Number(item.desconto) || 0
     const { error } = await supabase
       .from('lancamentos')
       .update({
         status: 'pago',
-        valor_pago: item.valor,
+        valor_pago: Number(item.valor) - desconto,
         data_pagamento: todayISO(),
       })
       .eq('id', item.id)
@@ -205,6 +210,20 @@ export default function Lancamentos({ tipo }) {
               <option key={p.id} value={p.id}>{p.nome}</option>
             ))}
           </select>
+          <input
+            placeholder={tipo === 'pagar' ? 'Forma de pagamento (Pix, Boleto...)' : 'Forma de recebimento (Pix, Dinheiro...)'}
+            value={form.forma_pagamento}
+            onChange={(e) => setForm({ ...form, forma_pagamento: e.target.value })}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          />
+          <input
+            type="number"
+            step="0.01"
+            placeholder="Desconto (opcional)"
+            value={form.desconto}
+            onChange={(e) => setForm({ ...form, desconto: e.target.value })}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          />
           <textarea
             placeholder="Observações"
             value={form.observacoes}
