@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { parseOfx } from '../lib/parseOfx'
 import { formatDateBR, formatCurrencyBRL } from '../lib/format'
-import { Upload, Landmark, Check, Link2, X } from 'lucide-react'
+import { Upload, Landmark, Check, Link2, X, Plus } from 'lucide-react'
 
 export default function Conciliacao() {
   const [contas, setContas] = useState([])
@@ -10,6 +10,12 @@ export default function Conciliacao() {
   const [transacoes, setTransacoes] = useState([])
   const [sugestoes, setSugestoes] = useState({}) // { transacaoId: lancamentoId | '' }
   const [lancamentosAbertos, setLancamentosAbertos] = useState({ pagar: [], receber: [] })
+  const [categorias, setCategorias] = useState({ despesa: [], receita: [] })
+  const [centros, setCentros] = useState([])
+  const [fornecedores, setFornecedores] = useState([])
+  const [clientes, setClientes] = useState([])
+  const [criandoParaId, setCriandoParaId] = useState(null)
+  const [novoLancamento, setNovoLancamento] = useState({})
   const [loading, setLoading] = useState(false)
   const [mensagem, setMensagem] = useState(null)
   const [erro, setErro] = useState(null)
@@ -21,6 +27,23 @@ export default function Conciliacao() {
       if (data && data.length > 0) setContaId(data[0].id)
     }
     carregarContas()
+
+    async function carregarApoio() {
+      const [cats, cent, forn, cli] = await Promise.all([
+        supabase.from('categorias').select('*').eq('ativo', true).order('nome').range(0, 9999),
+        supabase.from('centros_de_custo').select('*').eq('ativo', true).order('nome').range(0, 9999),
+        supabase.from('fornecedores').select('*').eq('ativo', true).order('nome').range(0, 9999),
+        supabase.from('clientes').select('*').eq('ativo', true).order('nome').range(0, 9999),
+      ])
+      setCategorias({
+        despesa: (cats.data || []).filter((c) => c.tipo === 'despesa'),
+        receita: (cats.data || []).filter((c) => c.tipo === 'receita'),
+      })
+      setCentros(cent.data || [])
+      setFornecedores(forn.data || [])
+      setClientes(cli.data || [])
+    }
+    carregarApoio()
   }, [])
 
   async function carregarTransacoesELancamentos(conta) {
@@ -145,6 +168,62 @@ export default function Conciliacao() {
     carregarTransacoesELancamentos(contaId)
   }
 
+  function abrirCriacao(transacao) {
+    const tipo = transacao.valor >= 0 ? 'receber' : 'pagar'
+    setCriandoParaId(transacao.id)
+    setNovoLancamento({
+      tipo,
+      descricao: transacao.descricao || '',
+      categoria_id: '',
+      centro_custo_id: '',
+      pessoa_id: '',
+    })
+  }
+
+  async function salvarNovoLancamento(transacao) {
+    const tipo = novoLancamento.tipo
+    const campoPessoa = tipo === 'pagar' ? 'fornecedor_id' : 'cliente_id'
+    const valorAbs = Math.abs(Number(transacao.valor))
+
+    const payload = {
+      tipo,
+      descricao: novoLancamento.descricao.trim() || transacao.descricao,
+      valor: valorAbs,
+      valor_pago: valorAbs,
+      status: 'pago',
+      data_vencimento: transacao.data,
+      data_pagamento: transacao.data,
+      data_competencia: transacao.data,
+      categoria_id: novoLancamento.categoria_id || null,
+      centro_custo_id: novoLancamento.centro_custo_id || null,
+      [campoPessoa]: novoLancamento.pessoa_id || null,
+    }
+
+    const { data: novo, error: erroInsert } = await supabase
+      .from('lancamentos')
+      .insert(payload)
+      .select()
+      .single()
+
+    if (erroInsert) {
+      setErro(erroInsert.message)
+      return
+    }
+
+    const { error: erroUpdate } = await supabase
+      .from('transacoes_bancarias')
+      .update({ conciliado: true, lancamento_id: novo.id })
+      .eq('id', transacao.id)
+
+    if (erroUpdate) {
+      setErro(erroUpdate.message)
+      return
+    }
+
+    setCriandoParaId(null)
+    carregarTransacoesELancamentos(contaId)
+  }
+
   return (
     <div className="max-w-4xl">
       <h2 className="text-2xl font-bold text-gray-900 mb-1">Conciliação Bancária</h2>
@@ -223,6 +302,13 @@ export default function Conciliacao() {
                     <Link2 size={14} /> Vincular
                   </button>
                   <button
+                    onClick={() => abrirCriacao(t)}
+                    title="Criar um novo lançamento a partir desta transação"
+                    className="flex items-center gap-1 rounded-lg bg-primary-50 text-primary-700 px-3 py-1.5 text-sm font-medium hover:bg-primary-100"
+                  >
+                    <Plus size={14} /> Criar lançamento
+                  </button>
+                  <button
                     onClick={() => marcarSemVinculo(t.id)}
                     title="Esta transação não corresponde a nenhum lançamento (ex: tarifa, transferência interna)"
                     className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-500 px-3 py-1.5 text-sm hover:bg-gray-200"
@@ -230,6 +316,61 @@ export default function Conciliacao() {
                     <X size={14} /> Sem vínculo
                   </button>
                 </div>
+
+                {criandoParaId === t.id && (
+                  <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3 grid grid-cols-2 gap-2">
+                    <input
+                      placeholder="Descrição"
+                      value={novoLancamento.descricao}
+                      onChange={(e) => setNovoLancamento({ ...novoLancamento, descricao: e.target.value })}
+                      className="col-span-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                    />
+                    <select
+                      value={novoLancamento.categoria_id}
+                      onChange={(e) => setNovoLancamento({ ...novoLancamento, categoria_id: e.target.value })}
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                    >
+                      <option value="">Categoria...</option>
+                      {categorias[novoLancamento.tipo === 'pagar' ? 'despesa' : 'receita'].map((c) => (
+                        <option key={c.id} value={c.id}>{c.nome}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={novoLancamento.centro_custo_id}
+                      onChange={(e) => setNovoLancamento({ ...novoLancamento, centro_custo_id: e.target.value })}
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                    >
+                      <option value="">Centro de custo...</option>
+                      {centros.map((c) => (
+                        <option key={c.id} value={c.id}>{c.nome}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={novoLancamento.pessoa_id}
+                      onChange={(e) => setNovoLancamento({ ...novoLancamento, pessoa_id: e.target.value })}
+                      className="col-span-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                    >
+                      <option value="">{novoLancamento.tipo === 'pagar' ? 'Fornecedor...' : 'Cliente...'}</option>
+                      {(novoLancamento.tipo === 'pagar' ? fornecedores : clientes).map((p) => (
+                        <option key={p.id} value={p.id}>{p.nome}</option>
+                      ))}
+                    </select>
+                    <div className="col-span-2 flex justify-end gap-2">
+                      <button
+                        onClick={() => setCriandoParaId(null)}
+                        className="px-3 py-1.5 text-sm text-gray-500"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() => salvarNovoLancamento(t)}
+                        className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-primary-700"
+                      >
+                        <Check size={14} /> Criar e vincular
+                      </button>
+                    </div>
+                  </div>
+                )}
               </li>
             )
           })}
