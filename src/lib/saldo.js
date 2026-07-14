@@ -4,7 +4,7 @@ import { supabase } from './supabase'
 // saldo_inicial + receitas pagas na conta - despesas pagas na conta
 // + transferências recebidas - transferências enviadas
 export async function calcularSaldosContas() {
-  const [contas, lancamentosPagos, transferencias] = await Promise.all([
+  const [contas, lancamentosPagos, transferencias, ajustes] = await Promise.all([
     supabase.from('contas_bancarias').select('id, nome, saldo_inicial').eq('ativo', true),
     supabase
       .from('lancamentos')
@@ -13,6 +13,7 @@ export async function calcularSaldosContas() {
       .not('conta_bancaria_id', 'is', null)
       .range(0, 9999),
     supabase.from('transferencias').select('conta_origem_id, conta_destino_id, valor').range(0, 9999),
+    supabase.from('ajustes_saldo').select('conta_bancaria_id, valor').range(0, 9999),
   ])
 
   const saldos = {} // contaId -> saldo atual
@@ -28,6 +29,10 @@ export async function calcularSaldosContas() {
   for (const t of transferencias.data || []) {
     if (t.conta_origem_id in saldos) saldos[t.conta_origem_id] -= Number(t.valor)
     if (t.conta_destino_id in saldos) saldos[t.conta_destino_id] += Number(t.valor)
+  }
+
+  for (const a of ajustes.data || []) {
+    if (a.conta_bancaria_id in saldos) saldos[a.conta_bancaria_id] += Number(a.valor)
   }
 
   return { saldos, contas: contas.data || [] }

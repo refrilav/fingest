@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { calcularSaldosContas } from '../lib/saldo'
-import { Plus, Trash2, Wallet, ArrowLeftRight } from 'lucide-react'
+import { Plus, Trash2, Wallet, ArrowLeftRight, SlidersHorizontal } from 'lucide-react'
 import { formatCurrencyBRL } from '../lib/format'
 
 const CAMPOS_VAZIOS = { nome: '', banco: '', agencia: '', numero_conta: '', saldo_inicial: '0' }
@@ -65,6 +65,12 @@ export default function ContasBancarias() {
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-2xl font-bold text-gray-900">Contas Bancárias</h2>
         <div className="flex gap-2">
+          <Link
+            to="/ajustes-saldo"
+            className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-200"
+          >
+            <SlidersHorizontal size={16} /> Ajustar saldo
+          </Link>
           <Link
             to="/transferencias"
             className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-200"
