@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { formatDateBR, formatCurrencyBRL, todayISO, isOverdue } from '../lib/format'
-import { Plus, Trash2, CheckCircle2, X } from 'lucide-react'
+import { formatDateBR, formatCurrencyBRL, todayISO, isOverdue, addMonthsISO } from '../lib/format'
+import { Plus, Trash2, CheckCircle2, X, Repeat } from 'lucide-react'
 
 const CAMPOS_VAZIOS = {
   descricao: '',
@@ -15,6 +15,8 @@ const CAMPOS_VAZIOS = {
   observacoes: '',
   forma_pagamento: '',
   desconto: '',
+  repeticao: 'unico', // 'unico' | 'parcelado' | 'recorrente'
+  quantidade: '2',
 }
 
 // tipo: 'pagar' | 'receber'
@@ -67,21 +69,75 @@ export default function Lancamentos({ tipo }) {
     e.preventDefault()
     if (!form.descricao.trim() || !form.valor || !form.data_vencimento) return
 
-    const payload = {
+    const basePayload = {
       tipo,
-      descricao: form.descricao.trim(),
-      valor: Number(form.valor),
-      data_vencimento: form.data_vencimento,
-      data_competencia: form.data_competencia || form.data_vencimento,
       categoria_id: form.categoria_id || null,
       centro_custo_id: form.centro_custo_id || null,
       [campoPessoa]: form[campoPessoa] || null,
       observacoes: form.observacoes || null,
       forma_pagamento: form.forma_pagamento || null,
-      desconto: Number(form.desconto) || 0,
     }
 
-    const { error } = await supabase.from('lancamentos').insert(payload)
+    let linhas = []
+
+    if (form.repeticao === 'unico') {
+      linhas = [
+        {
+          ...basePayload,
+          descricao: form.descricao.trim(),
+          valor: Number(form.valor),
+          desconto: Number(form.desconto) || 0,
+          data_vencimento: form.data_vencimento,
+          data_competencia: form.data_competencia || form.data_vencimento,
+        },
+      ]
+    } else if (form.repeticao === 'parcelado') {
+      // "valor" é o TOTAL, dividido igualmente entre as parcelas.
+      // A última parcela absorve a diferença de arredondamento dos centavos.
+      const totalParcelas = Math.max(2, Number(form.quantidade) || 2)
+      const valorTotal = Number(form.valor)
+      const valorParcela = Math.floor((valorTotal / totalParcelas) * 100) / 100
+      const somaParcelas = valorParcela * (totalParcelas - 1)
+      const grupoId = crypto.randomUUID()
+
+      for (let i = 0; i < totalParcelas; i++) {
+        const valorDaVez = i === totalParcelas - 1 ? Number((valorTotal - somaParcelas).toFixed(2)) : valorParcela
+        const vencimento = addMonthsISO(form.data_vencimento, i)
+        linhas.push({
+          ...basePayload,
+          descricao: `${form.descricao.trim()} (${i + 1}/${totalParcelas})`,
+          valor: valorDaVez,
+          desconto: 0,
+          data_vencimento: vencimento,
+          data_competencia: vencimento,
+          grupo_id: grupoId,
+          numero_parcela: i + 1,
+          total_parcelas: totalParcelas,
+        })
+      }
+    } else if (form.repeticao === 'recorrente') {
+      // "valor" se repete integralmente em cada ocorrência (ex: aluguel mensal)
+      const quantidade = Math.max(2, Number(form.quantidade) || 2)
+      const grupoId = crypto.randomUUID()
+
+      for (let i = 0; i < quantidade; i++) {
+        const vencimento = addMonthsISO(form.data_vencimento, i)
+        linhas.push({
+          ...basePayload,
+          descricao: `${form.descricao.trim()} (${i + 1}/${quantidade})`,
+          valor: Number(form.valor),
+          desconto: Number(form.desconto) || 0,
+          data_vencimento: vencimento,
+          data_competencia: vencimento,
+          recorrente: true,
+          grupo_id: grupoId,
+          numero_parcela: i + 1,
+          total_parcelas: quantidade,
+        })
+      }
+    }
+
+    const { error } = await supabase.from('lancamentos').insert(linhas)
     if (error) {
       setErro(error.message)
       return
@@ -164,15 +220,36 @@ export default function Lancamentos({ tipo }) {
             className="col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
             required
           />
+
+          <div className="col-span-2 flex gap-2 bg-gray-50 rounded-lg p-1">
+            {[
+              { valor: 'unico', label: 'Único' },
+              { valor: 'parcelado', label: 'Parcelado' },
+              { valor: 'recorrente', label: 'Recorrente' },
+            ].map((opt) => (
+              <button
+                key={opt.valor}
+                type="button"
+                onClick={() => setForm({ ...form, repeticao: opt.valor })}
+                className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
+                  form.repeticao === opt.valor ? 'bg-white shadow-sm text-primary-700' : 'text-gray-500'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
           <input
             type="number"
             step="0.01"
-            placeholder="Valor *"
+            placeholder={form.repeticao === 'parcelado' ? 'Valor total *' : 'Valor *'}
             value={form.valor}
             onChange={(e) => setForm({ ...form, valor: e.target.value })}
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
             required
           />
+
           <input
             type="date"
             value={form.data_vencimento}
@@ -180,6 +257,41 @@ export default function Lancamentos({ tipo }) {
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
             required
           />
+
+          {form.repeticao !== 'unico' && (
+            <input
+              type="number"
+              min="2"
+              max="60"
+              placeholder={form.repeticao === 'parcelado' ? 'Nº de parcelas' : 'Repetir por quantos meses'}
+              value={form.quantidade}
+              onChange={(e) => setForm({ ...form, quantidade: e.target.value })}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              required
+            />
+          )}
+
+          {form.repeticao !== 'unico' && (
+            <div className="col-span-2 flex items-center gap-2 text-xs text-gray-500 bg-primary-50 rounded-lg px-3 py-2">
+              <Repeat size={14} className="text-primary-600 shrink-0" />
+              {form.repeticao === 'parcelado' ? (
+                <span>
+                  1ª parcela vence em <strong>{form.data_vencimento.split('-').reverse().join('/')}</strong>, as demais
+                  mensalmente. Valor de cada parcela: {' '}
+                  <strong>
+                    {form.valor && form.quantidade
+                      ? formatCurrencyBRL(Number(form.valor) / Math.max(2, Number(form.quantidade) || 2))
+                      : '—'}
+                  </strong>
+                </span>
+              ) : (
+                <span>
+                  1ª ocorrência em <strong>{form.data_vencimento.split('-').reverse().join('/')}</strong>, repetindo o
+                  mesmo valor mensalmente por <strong>{form.quantidade || '—'}</strong> vezes.
+                </span>
+              )}
+            </div>
+          )}
           <select
             value={form.categoria_id}
             onChange={(e) => setForm({ ...form, categoria_id: e.target.value })}

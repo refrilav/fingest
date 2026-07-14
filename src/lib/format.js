@@ -71,3 +71,18 @@ export function isOverdue(dueDateStr, referenceDateStr = todayISO()) {
   return dueDateStr.substring(0, 10) < referenceDateStr.substring(0, 10)
 }
 
+// Soma N meses a uma data 'YYYY-MM-DD', ajustando para o último dia do mês quando
+// o dia original não existir no mês de destino (ex: 31/01 + 1 mês -> 28 ou 29/02).
+export function addMonthsISO(dateStr, meses) {
+  const [year, month, day] = dateStr.substring(0, 10).split('-').map(Number)
+  // meio-dia UTC evita qualquer problema de fuso horário na hora de extrair ano/mês/dia de volta
+  const base = new Date(Date.UTC(year, month - 1 + meses, day, 12))
+  // Se o dia "vazou" pro mês seguinte (dia inválido), volta pro último dia do mês certo
+  const alvo = new Date(Date.UTC(year, month - 1 + meses + 1, 0, 12))
+  const data = base.getUTCMonth() === alvo.getUTCMonth() ? base : alvo
+  const y = data.getUTCFullYear()
+  const m = String(data.getUTCMonth() + 1).padStart(2, '0')
+  const d = String(data.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
