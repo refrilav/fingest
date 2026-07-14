@@ -12,6 +12,7 @@ const CAMPOS_VAZIOS = {
   centro_custo_id: '',
   fornecedor_id: '',
   cliente_id: '',
+  equipamento_id: '',
   observacoes: '',
   forma_pagamento: '',
   desconto: '',
@@ -25,6 +26,7 @@ export default function Lancamentos({ tipo }) {
   const [categorias, setCategorias] = useState([])
   const [centros, setCentros] = useState([])
   const [pessoas, setPessoas] = useState([]) // fornecedores ou clientes
+  const [equipamentos, setEquipamentos] = useState([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
   const [form, setForm] = useState(CAMPOS_VAZIOS)
@@ -38,16 +40,19 @@ export default function Lancamentos({ tipo }) {
 
   async function carregar() {
     setLoading(true)
-    const [lanc, cats, cent, pes] = await Promise.all([
+    const [lanc, cats, cent, pes, equips] = await Promise.all([
       supabase
         .from('lancamentos')
-        .select('*, categorias(nome), centros_de_custo(nome), fornecedores(nome), clientes(nome)')
+        .select('*, categorias(nome), centros_de_custo(nome), fornecedores(nome), clientes(nome), equipamentos(nome)')
         .eq('tipo', tipo)
         .order('data_vencimento')
         .range(0, 9999),
       supabase.from('categorias').select('*').eq('tipo', tipoCategoria).eq('ativo', true).order('nome').range(0, 9999),
       supabase.from('centros_de_custo').select('*').eq('ativo', true).order('nome').range(0, 9999),
       supabase.from(tabelaPessoa).select('*').eq('ativo', true).order('nome').range(0, 9999),
+      tipo === 'receber'
+        ? supabase.from('equipamentos').select('*').eq('ativo', true).order('nome').range(0, 9999)
+        : Promise.resolve({ data: [] }),
     ])
 
     if (lanc.error) setErro(lanc.error.message)
@@ -55,6 +60,7 @@ export default function Lancamentos({ tipo }) {
     setCategorias(cats.data || [])
     setCentros(cent.data || [])
     setPessoas(pes.data || [])
+    setEquipamentos(equips.data || [])
     setLoading(false)
   }
 
@@ -74,6 +80,7 @@ export default function Lancamentos({ tipo }) {
       categoria_id: form.categoria_id || null,
       centro_custo_id: form.centro_custo_id || null,
       [campoPessoa]: form[campoPessoa] || null,
+      equipamento_id: tipo === 'receber' ? form.equipamento_id || null : null,
       observacoes: form.observacoes || null,
       forma_pagamento: form.forma_pagamento || null,
     }
@@ -322,6 +329,18 @@ export default function Lancamentos({ tipo }) {
               <option key={p.id} value={p.id}>{p.nome}</option>
             ))}
           </select>
+          {tipo === 'receber' && (
+            <select
+              value={form.equipamento_id}
+              onChange={(e) => setForm({ ...form, equipamento_id: e.target.value })}
+              className="col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="">Equipamento...</option>
+              {equipamentos.map((eq) => (
+                <option key={eq.id} value={eq.id}>{eq.nome}</option>
+              ))}
+            </select>
+          )}
           <input
             placeholder={tipo === 'pagar' ? 'Forma de pagamento (Pix, Boleto...)' : 'Forma de recebimento (Pix, Dinheiro...)'}
             value={form.forma_pagamento}
@@ -382,6 +401,7 @@ export default function Lancamentos({ tipo }) {
                   <p className="text-xs text-gray-500">
                     Venc: {formatDateBR(item.data_vencimento)}
                     {item.categorias?.nome ? ` · ${item.categorias.nome}` : ''}
+                    {item.equipamentos?.nome ? ` · ${item.equipamentos.nome}` : ''}
                     {pessoaNome ? ` · ${pessoaNome}` : ''}
                   </p>
                 </div>
