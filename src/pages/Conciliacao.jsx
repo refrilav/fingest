@@ -94,7 +94,30 @@ export default function Conciliacao() {
       return
     }
 
-    const linhas = parsed.map((t) => ({
+    // Busca quais FITIDs dessa conta já existem no banco, e filtra ANTES de inserir.
+    // Mais confiável do que depender do upsert reconhecer a constraint de unicidade.
+    const fitidsDoArquivo = parsed.map((t) => t.fitid)
+    const { data: existentes, error: erroConsulta } = await supabase
+      .from('transacoes_bancarias')
+      .select('fitid')
+      .eq('conta_bancaria_id', contaId)
+      .in('fitid', fitidsDoArquivo)
+
+    if (erroConsulta) {
+      setErro(erroConsulta.message)
+      return
+    }
+
+    const fitidsExistentes = new Set((existentes || []).map((e) => e.fitid))
+    const novasTransacoes = parsed.filter((t) => !fitidsExistentes.has(t.fitid))
+
+    if (novasTransacoes.length === 0) {
+      setMensagem(`Nenhuma transação nova — todas as ${parsed.length} lidas no arquivo já haviam sido importadas antes.`)
+      e.target.value = ''
+      return
+    }
+
+    const linhas = novasTransacoes.map((t) => ({
       conta_bancaria_id: contaId,
       fitid: t.fitid,
       data: t.data,
@@ -102,18 +125,14 @@ export default function Conciliacao() {
       descricao: t.descricao,
     }))
 
-    // upsert ignorando duplicados (mesma conta + fitid já existente)
-    const { error, data } = await supabase
-      .from('transacoes_bancarias')
-      .upsert(linhas, { onConflict: 'conta_bancaria_id,fitid', ignoreDuplicates: true })
-      .select()
+    const { error, data } = await supabase.from('transacoes_bancarias').insert(linhas).select()
 
     if (error) {
       setErro(error.message)
       return
     }
 
-    setMensagem(`${data.length} nova(s) transação(ões) importada(s) de ${parsed.length} lida(s) no arquivo (as demais já existiam).`)
+    setMensagem(`${data.length} nova(s) transação(ões) importada(s) de ${parsed.length} lida(s) no arquivo (${parsed.length - data.length} já existiam).`)
     carregarTransacoesELancamentos(contaId)
     e.target.value = '' // limpa o input pra poder reenviar o mesmo arquivo se precisar
   }
