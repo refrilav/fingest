@@ -78,7 +78,7 @@ export default function Transferencias() {
 
       {erro && <div className="mb-4 rounded-lg bg-red-50 text-red-700 text-sm px-4 py-2">{erro}</div>}
 
-      <form onSubmit={salvar} className="bg-white border border-gray-200 rounded-lg p-4 mb-6 grid grid-cols-2 gap-3">
+      <form onSubmit={salvar} className="bg-white border border-gray-200 rounded-lg p-4 mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
         <select
           value={form.conta_origem_id}
           onChange={(e) => setForm({ ...form, conta_origem_id: e.target.value })}
@@ -125,9 +125,9 @@ export default function Transferencias() {
           placeholder="Observações (opcional)"
           value={form.observacoes}
           onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
-          className="col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
         />
-        <div className="col-span-2 flex justify-end">
+        <div className="col-span-1 sm:col-span-2 flex justify-end">
           <button
             type="submit"
             className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700"
@@ -142,7 +142,7 @@ export default function Transferencias() {
       ) : (
         <ul className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100">
           {lista.map((t) => (
-            <li key={t.id} className="flex items-center justify-between px-4 py-3">
+            <li key={t.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3">
               <div>
                 <p className="text-sm font-medium text-gray-800">
                   {t.origem?.nome} <ArrowLeftRight size={12} className="inline mx-1 text-gray-400" /> {t.destino?.nome}

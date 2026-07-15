@@ -281,8 +281,8 @@ export default function Conciliacao() {
         Importe o extrato (OFX) do banco e vincule cada transação a um lançamento de contas a pagar/receber.
       </p>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6 flex items-center gap-4">
-        <div className="flex-1">
+      <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6 flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="flex-1 w-full">
           <label className="block text-xs text-gray-500 mb-1">Conta bancária</label>
           <select
             value={contaId}
@@ -297,7 +297,7 @@ export default function Conciliacao() {
             <p className="text-xs text-red-500 mt-1">Cadastre uma conta bancária primeiro.</p>
           )}
         </div>
-        <label className="flex items-center gap-2 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700 cursor-pointer">
+        <label className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700 cursor-pointer w-full sm:w-auto">
           <Upload size={16} />
           Importar OFX
           <input type="file" accept=".ofx,.qfx" className="hidden" onChange={handleUpload} disabled={!contaId} />
@@ -321,20 +321,20 @@ export default function Conciliacao() {
             const candidatos = lancamentosAbertos[tipo]
             return (
               <li key={t.id} className="px-4 py-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{t.descricao}</p>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-800 break-words">{t.descricao}</p>
                     <p className="text-xs text-gray-500">{formatDateBR(t.data)}</p>
                   </div>
                   <span className={`text-sm font-semibold ${t.valor >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {formatCurrencyBRL(t.valor)}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <select
                     value={sugestoes[t.id] || ''}
                     onChange={(e) => setSugestoes({ ...sugestoes, [t.id]: e.target.value })}
-                    className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                    className="w-full sm:flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
                   >
                     <option value="">Selecione um lançamento...</option>
                     {candidatos.map((l) => (
@@ -424,12 +424,12 @@ export default function Conciliacao() {
                 )}
 
                 {criandoParaId === t.id && (
-                  <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3 grid grid-cols-2 gap-2">
+                  <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <input
                       placeholder="Descrição"
                       value={novoLancamento.descricao}
                       onChange={(e) => setNovoLancamento({ ...novoLancamento, descricao: e.target.value })}
-                      className="col-span-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                      className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
                     />
                     <select
                       value={novoLancamento.categoria_id}
@@ -457,7 +457,7 @@ export default function Conciliacao() {
                       onChange={(id) => setNovoLancamento({ ...novoLancamento, pessoa_id: id })}
                       placeholder={novoLancamento.tipo === 'pagar' ? 'Buscar fornecedor...' : 'Buscar cliente...'}
                     />
-                    <div className="col-span-2 flex justify-end gap-2">
+                    <div className="col-span-1 sm:col-span-2 flex justify-end gap-2">
                       <button
                         onClick={() => setCriandoParaId(null)}
                         className="px-3 py-1.5 text-sm text-gray-500"

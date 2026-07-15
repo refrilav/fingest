@@ -80,7 +80,7 @@ export default function BuscaPessoa({ tabela, value, onChange, placeholder }) {
   }
 
   return (
-    <div ref={containerRef} className="relative col-span-2">
+    <div ref={containerRef} className="relative col-span-1 sm:col-span-2">
       {nomeSelecionado && !aberto ? (
         <div className="flex items-center justify-between rounded-lg border border-gray-300 px-3 py-2 text-sm bg-gray-50">
           <span className="text-gray-800">{nomeSelecionado}</span>

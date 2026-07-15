@@ -62,9 +62,9 @@ export default function ContasBancarias() {
 
   return (
     <div className="max-w-3xl">
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 gap-2">
         <h2 className="text-2xl font-bold text-gray-900">Contas Bancárias</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <Link
             to="/ajustes-saldo"
             className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-200"
@@ -92,12 +92,12 @@ export default function ContasBancarias() {
       {erro && <div className="mb-4 rounded-lg bg-red-50 text-red-700 text-sm px-4 py-2">{erro}</div>}
 
       {mostrarForm && (
-        <form onSubmit={salvar} className="bg-white border border-gray-200 rounded-lg p-4 mb-6 grid grid-cols-2 gap-3">
+        <form onSubmit={salvar} className="bg-white border border-gray-200 rounded-lg p-4 mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <input
             placeholder="Nome (ex: Sicredi CC) *"
             value={form.nome}
             onChange={(e) => setForm({ ...form, nome: e.target.value })}
-            className="col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
             required
           />
           <input
@@ -126,7 +126,7 @@ export default function ContasBancarias() {
             onChange={(e) => setForm({ ...form, saldo_inicial: e.target.value })}
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
-          <div className="col-span-2 flex justify-end gap-2">
+          <div className="col-span-1 sm:col-span-2 flex justify-end gap-2">
             <button type="button" onClick={() => setMostrarForm(false)} className="px-4 py-2 text-sm text-gray-500">
               Cancelar
             </button>
@@ -142,7 +142,7 @@ export default function ContasBancarias() {
       ) : (
         <ul className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100">
           {lista.map((c) => (
-            <li key={c.id} className="flex items-center justify-between px-4 py-3">
+            <li key={c.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3">
               <div className="flex items-center gap-3">
                 <Wallet size={18} className="text-primary-600" />
                 <div>

@@ -153,7 +153,7 @@ export default function Categorias() {
       {loading ? (
         <p className="text-gray-400 text-sm">Carregando...</p>
       ) : (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <ListaColuna
             titulo="Receitas"
             tabela="categorias"

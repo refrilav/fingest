@@ -329,20 +329,20 @@ export default function Lancamentos({ tipo }) {
       {erro && <div className="mb-4 rounded-lg bg-red-50 text-red-700 text-sm px-4 py-2">{erro}</div>}
 
       {mostrarForm && (
-        <form onSubmit={salvar} className="bg-white border border-gray-200 rounded-lg p-4 mb-6 grid grid-cols-2 gap-3">
+        <form onSubmit={salvar} className="bg-white border border-gray-200 rounded-lg p-4 mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
           {editandoId && (
-            <p className="col-span-2 text-sm font-medium text-primary-700 -mb-1">Editando lançamento</p>
+            <p className="col-span-1 sm:col-span-2 text-sm font-medium text-primary-700 -mb-1">Editando lançamento</p>
           )}
           <input
             placeholder="Descrição *"
             value={form.descricao}
             onChange={(e) => setForm({ ...form, descricao: e.target.value })}
-            className="col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
             required
           />
 
           {!editandoId && (
-            <div className="col-span-2 flex gap-2 bg-gray-50 rounded-lg p-1">
+            <div className="col-span-1 sm:col-span-2 flex gap-2 bg-gray-50 rounded-lg p-1">
               {[
                 { valor: 'unico', label: 'Único' },
                 { valor: 'parcelado', label: 'Parcelado' },
@@ -394,7 +394,7 @@ export default function Lancamentos({ tipo }) {
           )}
 
           {form.repeticao !== 'unico' && (
-            <div className="col-span-2 flex items-center gap-2 text-xs text-gray-500 bg-primary-50 rounded-lg px-3 py-2">
+            <div className="col-span-1 sm:col-span-2 flex items-center gap-2 text-xs text-gray-500 bg-primary-50 rounded-lg px-3 py-2">
               <Repeat size={14} className="text-primary-600 shrink-0" />
               {form.repeticao === 'parcelado' ? (
                 <span>
@@ -444,7 +444,7 @@ export default function Lancamentos({ tipo }) {
             <select
               value={form.equipamento_id}
               onChange={(e) => setForm({ ...form, equipamento_id: e.target.value })}
-              className="col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
             >
               <option value="">Equipamento...</option>
               {equipamentos.map((eq) => (
@@ -477,7 +477,7 @@ export default function Lancamentos({ tipo }) {
 
           {editandoItemPago && (
             <>
-              <div className="col-span-2 text-xs text-gray-500 -mb-2 mt-1">Dados do pagamento</div>
+              <div className="col-span-1 sm:col-span-2 text-xs text-gray-500 -mb-2 mt-1">Dados do pagamento</div>
               <select
                 value={form.conta_bancaria_id}
                 onChange={(e) => setForm({ ...form, conta_bancaria_id: e.target.value })}
@@ -500,10 +500,10 @@ export default function Lancamentos({ tipo }) {
             placeholder="Observações"
             value={form.observacoes}
             onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
-            className="col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
             rows={2}
           />
-          <div className="col-span-2 flex justify-end gap-2">
+          <div className="col-span-1 sm:col-span-2 flex justify-end gap-2">
             <button type="button" onClick={cancelarFormulario} className="px-4 py-2 text-sm text-gray-500">
               Cancelar
             </button>
@@ -556,9 +556,9 @@ export default function Lancamentos({ tipo }) {
             const pessoaNome = tipo === 'pagar' ? item.fornecedores?.nome : item.clientes?.nome
             return (
               <li key={item.id} className="px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{item.descricao}</p>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-800 break-words">{item.descricao}</p>
                     <p className="text-xs text-gray-500">
                       Venc: {formatDateBR(item.data_vencimento)}
                       {item.categorias?.nome ? ` · ${item.categorias.nome}` : ''}
@@ -567,7 +567,7 @@ export default function Lancamentos({ tipo }) {
                       {item.status === 'pago' && item.contas_bancarias?.nome ? ` · ${item.contas_bancarias.nome}` : ''}
                     </p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                     {item.status === 'pago' && Math.abs(Number(item.valor_pago) - Number(item.valor)) > 0.005 ? (
                       <div className="text-right">
                         <span className="text-sm font-medium text-gray-700 line-through decoration-gray-300">

@@ -78,7 +78,7 @@ export default function Dashboard() {
         <p className="text-gray-400 text-sm">Carregando dashboard...</p>
       ) : (
         <>
-          <div className="grid grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <Card
               icon={Wallet}
               label="Saldo em contas"
@@ -107,7 +107,7 @@ export default function Dashboard() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <ListaResumo titulo="Próximos a pagar" itens={proximosPagar} pessoaKey="fornecedores" />
             <ListaResumo titulo="Próximos a receber" itens={proximosReceber} pessoaKey="clientes" />
           </div>

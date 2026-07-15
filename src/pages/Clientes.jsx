@@ -60,9 +60,9 @@ export default function Clientes() {
 
   return (
     <div className="max-w-3xl">
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 gap-2">
         <h2 className="text-2xl font-bold text-gray-900">Clientes</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <Link
             to="/clientes/importar"
             className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-200"
@@ -82,12 +82,12 @@ export default function Clientes() {
       {erro && <div className="mb-4 rounded-lg bg-red-50 text-red-700 text-sm px-4 py-2">{erro}</div>}
 
       {mostrarForm && (
-        <form onSubmit={salvar} className="bg-white border border-gray-200 rounded-lg p-4 mb-6 grid grid-cols-2 gap-3">
+        <form onSubmit={salvar} className="bg-white border border-gray-200 rounded-lg p-4 mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <input
             placeholder="Nome *"
             value={form.nome}
             onChange={(e) => setForm({ ...form, nome: e.target.value })}
-            className="col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
             required
           />
           <input
@@ -106,16 +106,16 @@ export default function Clientes() {
             placeholder="E-mail"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
-            className="col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
           <textarea
             placeholder="Observações"
             value={form.observacoes}
             onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
-            className="col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
             rows={2}
           />
-          <div className="col-span-2 flex justify-end gap-2">
+          <div className="col-span-1 sm:col-span-2 flex justify-end gap-2">
             <button type="button" onClick={() => setMostrarForm(false)} className="px-4 py-2 text-sm text-gray-500">
               Cancelar
             </button>
@@ -131,7 +131,7 @@ export default function Clientes() {
       ) : (
         <ul className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100">
           {lista.map((f) => (
-            <li key={f.id} className="flex items-center justify-between px-4 py-3">
+            <li key={f.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3">
               <div>
                 <p className="text-sm font-medium text-gray-800">{f.nome}</p>
                 <p className="text-xs text-gray-500">
