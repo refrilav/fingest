@@ -24,6 +24,7 @@ const navItems = [
   { to: '/conciliacao', label: 'Conciliação Bancária', icon: Landmark },
   { to: '/transferencias', label: 'Transferências', icon: ArrowLeftRight },
   { to: '/relatorios', label: 'Relatórios / DRE', icon: FileBarChart },
+  { to: '/fluxo-caixa', label: 'Fluxo de Caixa', icon: Wallet },
   { to: '/categorias', label: 'Categorias', icon: Tags },
   { to: '/fornecedores', label: 'Fornecedores', icon: Truck },
   { to: '/clientes', label: 'Clientes', icon: Users },
