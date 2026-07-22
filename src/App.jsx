@@ -14,6 +14,7 @@ import ImportarPessoas from './pages/ImportarPessoas'
 import Transferencias from './pages/Transferencias'
 import AjustesSaldo from './pages/AjustesSaldo'
 import ExtratoConta from './pages/ExtratoConta'
+import FluxoCaixa from './pages/FluxoCaixa'
 
 function RotaProtegida({ children }) {
   const { session, loading } = useAuth()
@@ -40,6 +41,7 @@ function Rotas() {
         <Route path="contas-a-receber" element={<Lancamentos tipo="receber" />} />
         <Route path="conciliacao" element={<Conciliacao />} />
         <Route path="relatorios" element={<Relatorios />} />
+        <Route path="fluxo-caixa" element={<FluxoCaixa />} />
         <Route path="categorias" element={<Categorias />} />
         <Route path="fornecedores" element={<Fornecedores />} />
         <Route path="clientes" element={<Clientes />} />

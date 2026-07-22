@@ -34,7 +34,7 @@ export default function Relatorios() {
 
       const { data, error } = await supabase
         .from('lancamentos')
-        .select('tipo, valor, data_competencia, categoria_id, categorias(nome, natureza)')
+        .select('tipo, valor, data_competencia, categoria_id, categorias(nome, natureza), equipamento_id, equipamentos(nome)')
         .neq('status', 'cancelado')
         .gte('data_competencia', inicio)
         .lte('data_competencia', fim)
@@ -46,7 +46,7 @@ export default function Relatorios() {
         return
       }
 
-      const novasReceitasOp = {}
+      const novasReceitasOp = {} // agrupado por EQUIPAMENTO, com categorias aninhadas dentro
       const novasDespesasOp = {}
       const novasReceitasNaoOp = {}
       const novasDespesasNaoOp = {}
@@ -62,15 +62,31 @@ export default function Relatorios() {
         const naoOperacional = l.categorias?.natureza === 'nao_operacional'
         const isReceita = l.tipo === 'receber'
 
-        let alvo
-        if (isReceita && !naoOperacional) alvo = novasReceitasOp
-        else if (isReceita && naoOperacional) alvo = novasReceitasNaoOp
-        else if (!isReceita && !naoOperacional) alvo = novasDespesasOp
-        else alvo = novasDespesasNaoOp
+        if (isReceita && !naoOperacional) {
+          // Receitas operacionais: agrupa primeiro por equipamento, depois por categoria dentro dele
+          const equipNome = l.equipamentos?.nome || '(Sem equipamento)'
+          const equipId = l.equipamento_id || 'sem_equipamento'
 
-        if (!alvo[catId]) alvo[catId] = { nome: catNome, porMes: {}, total: 0 }
-        alvo[catId].porMes[mes] = (alvo[catId].porMes[mes] || 0) + Number(l.valor)
-        alvo[catId].total += Number(l.valor)
+          if (!novasReceitasOp[equipId]) {
+            novasReceitasOp[equipId] = { nome: equipNome, porMes: {}, total: 0, categorias: {} }
+          }
+          const grupo = novasReceitasOp[equipId]
+          grupo.porMes[mes] = (grupo.porMes[mes] || 0) + Number(l.valor)
+          grupo.total += Number(l.valor)
+
+          if (!grupo.categorias[catId]) grupo.categorias[catId] = { nome: catNome, porMes: {}, total: 0 }
+          grupo.categorias[catId].porMes[mes] = (grupo.categorias[catId].porMes[mes] || 0) + Number(l.valor)
+          grupo.categorias[catId].total += Number(l.valor)
+        } else {
+          let alvo
+          if (isReceita && naoOperacional) alvo = novasReceitasNaoOp
+          else if (!isReceita && !naoOperacional) alvo = novasDespesasOp
+          else alvo = novasDespesasNaoOp
+
+          if (!alvo[catId]) alvo[catId] = { nome: catNome, porMes: {}, total: 0 }
+          alvo[catId].porMes[mes] = (alvo[catId].porMes[mes] || 0) + Number(l.valor)
+          alvo[catId].total += Number(l.valor)
+        }
 
         const chave = isReceita ? (naoOperacional ? 'receitaNaoOp' : 'receitaOp') : naoOperacional ? 'despesaNaoOp' : 'despesaOp'
         novoTotalPorMes[mes][chave] += Number(l.valor)
@@ -120,8 +136,13 @@ export default function Relatorios() {
     linhas.push(header)
 
     linhas.push(['RECEITAS OPERACIONAIS'])
-    linhasOrdenadas(receitasOp).forEach((r) => {
-      linhas.push([r.nome, ...meses.map((m) => r.porMes[m] || 0), r.total, baseReceita ? r.total / baseReceita : 0])
+    linhasOrdenadas(receitasOp).forEach((equip) => {
+      linhas.push([equip.nome, ...meses.map((m) => equip.porMes[m] || 0), equip.total, baseReceita ? equip.total / baseReceita : 0])
+      Object.values(equip.categorias)
+        .sort((a, b) => b.total - a.total)
+        .forEach((cat) => {
+          linhas.push([`  ${cat.nome}`, ...meses.map((m) => cat.porMes[m] || 0), cat.total, baseReceita ? cat.total / baseReceita : 0])
+        })
     })
     linhas.push(['Total Receitas Operacionais', ...meses.map((m) => totalPorMes[m]?.receitaOp || 0), totalReceitaOp, 1])
     linhas.push([])
@@ -229,8 +250,8 @@ export default function Relatorios() {
             </thead>
             <tbody>
               <LinhaSecao texto="RECEITAS OPERACIONAIS" />
-              {linhasOrdenadas(receitasOp).map((r, i) => (
-                <LinhaCategoria key={i} nome={r.nome} porMes={r.porMes} total={r.total} meses={meses} totalReceitaGeral={baseReceita} />
+              {linhasOrdenadas(receitasOp).map((equip, i) => (
+                <GrupoEquipamento key={i} equip={equip} meses={meses} totalReceitaGeral={baseReceita} />
               ))}
               <LinhaSubtotal
                 texto="Total Receitas Operacionais"
@@ -337,6 +358,44 @@ export default function Relatorios() {
         </p>
       </div>
     </div>
+  )
+}
+
+function GrupoEquipamento({ equip, meses, totalReceitaGeral }) {
+  const categoriasOrdenadas = Object.values(equip.categorias).sort((a, b) => b.total - a.total)
+  return (
+    <>
+      <tr className="bg-gray-50/70 border-t border-gray-100">
+        <td className="px-4 py-1.5 font-semibold text-gray-700">{equip.nome}</td>
+        {meses.map((m) => (
+          <td key={m} className="px-3 py-1.5 text-right whitespace-nowrap font-semibold text-gray-700">
+            {equip.porMes[m] ? formatCurrencyBRL(equip.porMes[m]) : '—'}
+          </td>
+        ))}
+        <td className="px-3 py-1.5 text-right whitespace-nowrap font-semibold text-gray-900">
+          {formatCurrencyBRL(equip.total)}
+        </td>
+        <td className="px-3 py-1.5 text-right whitespace-nowrap font-semibold text-gray-500">
+          {totalReceitaGeral ? `${((equip.total / totalReceitaGeral) * 100).toFixed(1)}%` : '—'}
+        </td>
+      </tr>
+      {categoriasOrdenadas.map((cat, i) => (
+        <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+          <td className="pl-8 pr-4 py-1.5 text-gray-500 text-[13px]">{cat.nome}</td>
+          {meses.map((m) => (
+            <td key={m} className="px-3 py-1.5 text-right whitespace-nowrap text-gray-500 text-[13px]">
+              {cat.porMes[m] ? formatCurrencyBRL(cat.porMes[m]) : '—'}
+            </td>
+          ))}
+          <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-600 text-[13px]">
+            {formatCurrencyBRL(cat.total)}
+          </td>
+          <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-400 text-[13px]">
+            {totalReceitaGeral ? `${((cat.total / totalReceitaGeral) * 100).toFixed(1)}%` : '—'}
+          </td>
+        </tr>
+      ))}
+    </>
   )
 }
 
