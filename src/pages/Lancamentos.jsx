@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
+import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO, isOverdue, addMonthsISO, getRangeMes, mesAtualISO } from '../lib/format'
-import { Plus, Trash2, CheckCircle2, X, Repeat, Pencil } from 'lucide-react'
+import { Plus, Trash2, CheckCircle2, X, Repeat, Pencil, Download, Search, BarChart3 } from 'lucide-react'
 import BuscaPessoa from '../components/BuscaPessoa'
 
 const CAMPOS_VAZIOS = {
@@ -37,6 +38,8 @@ export default function Lancamentos({ tipo }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [periodo, setPeriodo] = useState(mesAtualISO()) // 'YYYY-MM' ou 'todos'
+  const [busca, setBusca] = useState('')
+  const [filtroCategoria, setFiltroCategoria] = useState('todas')
   const [pagandoId, setPagandoId] = useState(null)
   const [contaEscolhida, setContaEscolhida] = useState('')
   const [editandoId, setEditandoId] = useState(null)
@@ -290,9 +293,25 @@ export default function Lancamentos({ tipo }) {
       const venc = (item.data_vencimento || '').substring(0, 10)
       if (venc < inicio || venc > fim) return false
     }
-    if (filtroStatus === 'todos') return true
-    if (filtroStatus === 'vencido') return item.status === 'aberto' && isOverdue(item.data_vencimento)
-    return item.status === filtroStatus
+    if (filtroStatus === 'vencido') {
+      if (!(item.status === 'aberto' && isOverdue(item.data_vencimento))) return false
+    } else if (filtroStatus !== 'todos' && item.status !== filtroStatus) {
+      return false
+    }
+    if (filtroCategoria !== 'todas') {
+      const catId = item.categoria_id || 'sem_categoria'
+      if (catId !== filtroCategoria) return false
+    }
+    if (busca.trim()) {
+      const termo = busca.trim().toLowerCase()
+      const pessoaNome = (tipo === 'pagar' ? item.fornecedores?.nome : item.clientes?.nome) || ''
+      const alvo = [item.descricao, item.categorias?.nome, pessoaNome, item.observacoes, item.equipamentos?.nome]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      if (!alvo.includes(termo)) return false
+    }
+    return true
   })
 
   const totalFiltrado = listaFiltrada.reduce(
@@ -300,26 +319,133 @@ export default function Lancamentos({ tipo }) {
     0
   )
 
+  // Resumo de totais por categoria, considerando o mesmo filtro de status/período/busca
+  // (mas ignorando o próprio filtro de categoria, pra sempre mostrar todas as opções)
+  const listaParaResumo = lista.filter((item) => {
+    if (periodo !== 'todos') {
+      const { inicio, fim } = getRangeMes(periodo)
+      const venc = (item.data_vencimento || '').substring(0, 10)
+      if (venc < inicio || venc > fim) return false
+    }
+    if (filtroStatus === 'vencido') {
+      if (!(item.status === 'aberto' && isOverdue(item.data_vencimento))) return false
+    } else if (filtroStatus !== 'todos' && item.status !== filtroStatus) {
+      return false
+    }
+    if (busca.trim()) {
+      const termo = busca.trim().toLowerCase()
+      const pessoaNome = (tipo === 'pagar' ? item.fornecedores?.nome : item.clientes?.nome) || ''
+      const alvo = [item.descricao, item.categorias?.nome, pessoaNome, item.observacoes, item.equipamentos?.nome]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      if (!alvo.includes(termo)) return false
+    }
+    return true
+  })
+
+  const resumoPorCategoria = {}
+  for (const item of listaParaResumo) {
+    const catId = item.categoria_id || 'sem_categoria'
+    const catNome = item.categorias?.nome || '(Sem categoria)'
+    const valor = item.status === 'pago' ? Number(item.valor_pago) : Number(item.valor)
+    if (!resumoPorCategoria[catId]) resumoPorCategoria[catId] = { nome: catNome, total: 0, quantidade: 0 }
+    resumoPorCategoria[catId].total += valor
+    resumoPorCategoria[catId].quantidade += 1
+  }
+  const resumoOrdenado = Object.entries(resumoPorCategoria)
+    .map(([id, dados]) => ({ id, ...dados }))
+    .sort((a, b) => b.total - a.total)
+  const totalGeralResumo = resumoOrdenado.reduce((acc, r) => acc + r.total, 0)
+
   const itemEditando = editandoId ? lista.find((l) => l.id === editandoId) : null
   const editandoItemPago = itemEditando?.status === 'pago'
 
+  function exportarExcel() {
+    const linhas = [
+      [
+        'Descrição',
+        'Categoria',
+        'Centro de Custo',
+        tipo === 'pagar' ? 'Fornecedor' : 'Cliente',
+        'Equipamento',
+        'Vencimento',
+        'Competência',
+        'Pagamento',
+        'Valor',
+        'Desconto',
+        'Juros/Multa',
+        'Valor Pago',
+        'Status',
+        'Forma de Pagamento',
+        'Conta Bancária',
+        'Parcela',
+        'Recorrente',
+        'Observações',
+      ],
+    ]
+    listaFiltrada.forEach((item) => {
+      const pessoaNome = tipo === 'pagar' ? item.fornecedores?.nome : item.clientes?.nome
+      linhas.push([
+        item.descricao,
+        item.categorias?.nome || '',
+        item.centros_de_custo?.nome || '',
+        pessoaNome || '',
+        item.equipamentos?.nome || '',
+        formatDateBR(item.data_vencimento),
+        item.data_competencia ? formatDateBR(item.data_competencia) : '',
+        item.data_pagamento ? formatDateBR(item.data_pagamento) : '',
+        Number(item.valor),
+        Number(item.desconto) || 0,
+        Number(item.juros) || 0,
+        item.status === 'pago' ? Number(item.valor_pago) : '',
+        item.status,
+        item.forma_pagamento || '',
+        item.contas_bancarias?.nome || '',
+        item.total_parcelas ? `${item.numero_parcela}/${item.total_parcelas}` : '',
+        item.recorrente ? 'Sim' : 'Não',
+        item.observacoes || '',
+      ])
+    })
+    linhas.push([])
+    linhas.push(['Total geral', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', totalFiltrado])
+    linhas.push([])
+    linhas.push(['Resumo por categoria'])
+    resumoOrdenado.forEach((r) => {
+      linhas.push([r.nome, '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', r.total, `${r.quantidade} lançamento(s)`])
+    })
+
+    const ws = XLSX.utils.aoa_to_sheet(linhas)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, titulo)
+    XLSX.writeFile(wb, `${titulo.replace(/\s+/g, '_')}.xlsx`)
+  }
+
   return (
     <div className="max-w-4xl">
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 gap-2">
         <h2 className="text-2xl font-bold text-gray-900">{titulo}</h2>
-        <button
-          onClick={() => {
-            if (mostrarForm) {
-              cancelarFormulario()
-            } else {
-              setForm(CAMPOS_VAZIOS)
-              setMostrarForm(true)
-            }
-          }}
-          className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700"
-        >
-          <Plus size={16} /> Novo lançamento
-        </button>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <button
+            onClick={exportarExcel}
+            className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-200"
+          >
+            <Download size={16} /> Exportar Excel
+          </button>
+          <button
+            onClick={() => {
+              if (mostrarForm) {
+                cancelarFormulario()
+              } else {
+                setForm(CAMPOS_VAZIOS)
+                setMostrarForm(true)
+              }
+            }}
+            className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700"
+          >
+            <Plus size={16} /> Novo lançamento
+          </button>
+        </div>
       </div>
       <p className="text-gray-500 text-sm mb-4">
         Total {filtroStatus === 'todos' ? '' : `(${filtroStatus})`}:{' '}
@@ -514,6 +640,35 @@ export default function Lancamentos({ tipo }) {
         </form>
       )}
 
+      <div className="flex flex-col sm:flex-row gap-2 mb-3">
+        <div className="relative flex-1">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por descrição, categoria, cliente/fornecedor..."
+            className="w-full rounded-lg border border-gray-300 pl-8 pr-8 py-2 text-sm"
+          />
+          {busca && (
+            <button onClick={() => setBusca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        <select
+          value={filtroCategoria}
+          onChange={(e) => setFiltroCategoria(e.target.value)}
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm sm:w-56"
+        >
+          <option value="todas">Todas as categorias</option>
+          {categorias.map((c) => (
+            <option key={c.id} value={c.id}>{c.nome}</option>
+          ))}
+          <option value="sem_categoria">(Sem categoria)</option>
+        </select>
+      </div>
+
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="flex gap-2">
           {['todos', 'aberto', 'vencido', 'pago', 'cancelado'].map((s) => (
@@ -546,6 +701,33 @@ export default function Lancamentos({ tipo }) {
           </label>
         </div>
       </div>
+
+      {resumoOrdenado.length > 0 && (
+        <details className="mb-4 bg-white border border-gray-200 rounded-lg" open>
+          <summary className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 cursor-pointer select-none">
+            <BarChart3 size={15} className="text-primary-600" />
+            Totais por categoria
+          </summary>
+          <ul className="divide-y divide-gray-100 border-t border-gray-100">
+            {resumoOrdenado.map((r) => (
+              <li key={r.id} className="flex items-center justify-between px-4 py-1.5 text-sm">
+                <button
+                  onClick={() => setFiltroCategoria(filtroCategoria === r.id ? 'todas' : r.id)}
+                  className={`text-left hover:underline ${filtroCategoria === r.id ? 'text-primary-700 font-medium' : 'text-gray-600'}`}
+                >
+                  {r.nome} <span className="text-gray-400 font-normal">({r.quantidade})</span>
+                </button>
+                <span className="flex items-center gap-2">
+                  <span className="text-gray-800 font-medium">{formatCurrencyBRL(r.total)}</span>
+                  <span className="text-gray-400 text-xs w-12 text-right">
+                    {totalGeralResumo ? `${((r.total / totalGeralResumo) * 100).toFixed(0)}%` : ''}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       {loading ? (
         <p className="text-gray-400 text-sm">Carregando...</p>

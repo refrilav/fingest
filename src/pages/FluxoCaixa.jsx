@@ -1,184 +1,148 @@
 import { useEffect, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
-import {
-  formatCurrencyBRL,
-  mesAtualISO,
-  getRangeMes,
-  gerarIntervaloMeses,
-  formatMesLabel,
-  addMonthsISO,
-} from '../lib/format'
+import { formatCurrencyBRL, formatDateBR, todayISO } from '../lib/format'
 import { Wallet, Download } from 'lucide-react'
 
+// Primeiro e último dia do mês atual, como ponto de partida padrão
+function primeiroDiaMesAtual() {
+  return todayISO().substring(0, 7) + '-01'
+}
+function ultimoDiaMesAtual() {
+  const hoje = new Date()
+  const ultimo = new Date(Date.UTC(hoje.getFullYear(), hoje.getMonth() + 1, 0))
+  return ultimo.toISOString().substring(0, 10)
+}
+
 export default function FluxoCaixa() {
-  const [mesInicio, setMesInicio] = useState(mesAtualISO())
-  const [mesFim, setMesFim] = useState(mesAtualISO())
+  const [dataInicio, setDataInicio] = useState(primeiroDiaMesAtual())
+  const [dataFim, setDataFim] = useState(ultimoDiaMesAtual())
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
-  const [entradasOp, setEntradasOp] = useState({})
-  const [saidasOp, setSaidasOp] = useState({})
-  const [entradasFinanc, setEntradasFinanc] = useState({})
-  const [saidasFinanc, setSaidasFinanc] = useState({})
-  const [ajustes, setAjustes] = useState([])
-  const [totalPorMes, setTotalPorMes] = useState({})
-
-  const meses = gerarIntervaloMeses(mesInicio, mesFim)
+  const [saldoInicial, setSaldoInicial] = useState(0)
+  const [movimentos, setMovimentos] = useState([])
 
   useEffect(() => {
     async function carregar() {
       setLoading(true)
       setErro(null)
 
-      const inicio = getRangeMes(mesInicio).inicio
-      const fim = getRangeMes(mesFim).fim
-
-      const [lancRes, ajustesRes] = await Promise.all([
+      const [contasRes, lancAntesRes, ajustesAntesRes, lancPeriodoRes, ajustesPeriodoRes] = await Promise.all([
+        supabase.from('contas_bancarias').select('saldo_inicial').eq('ativo', true),
+        supabase.from('lancamentos').select('tipo, valor_pago').eq('status', 'pago').lt('data_pagamento', dataInicio).range(0, 9999),
+        supabase.from('ajustes_saldo').select('valor').lt('data', dataInicio).range(0, 9999),
         supabase
           .from('lancamentos')
-          .select('tipo, valor_pago, data_pagamento, categoria_id, categorias(nome, natureza)')
+          .select('tipo, valor_pago, data_pagamento, descricao, categorias(nome)')
           .eq('status', 'pago')
-          .gte('data_pagamento', inicio)
-          .lte('data_pagamento', fim)
+          .gte('data_pagamento', dataInicio)
+          .lte('data_pagamento', dataFim)
           .range(0, 9999),
         supabase
           .from('ajustes_saldo')
-          .select('valor, data, motivo')
-          .gte('data', inicio)
-          .lte('data', fim)
+          .select('valor, data, motivo, observacoes')
+          .gte('data', dataInicio)
+          .lte('data', dataFim)
           .range(0, 9999),
       ])
 
-      if (lancRes.error) {
-        setErro(lancRes.error.message)
+      if (lancPeriodoRes.error) {
+        setErro(lancPeriodoRes.error.message)
         setLoading(false)
         return
       }
 
-      const novasEntradasOp = {}
-      const novasSaidasOp = {}
-      const novasEntradasFinanc = {}
-      const novasSaidasFinanc = {}
-      const novoTotalPorMes = {}
-      meses.forEach((m) => (novoTotalPorMes[m] = { entradaOp: 0, saidaOp: 0, entradaFinanc: 0, saidaFinanc: 0, ajuste: 0 }))
+      // Saldo inicial do período = saldo inicial das contas + tudo que aconteceu ANTES da data de início
+      // (transferências não entram, pois no agregado de todas as contas elas se anulam)
+      let base = (contasRes.data || []).reduce((acc, c) => acc + Number(c.saldo_inicial), 0)
+      for (const l of lancAntesRes.data || []) {
+        base += l.tipo === 'receber' ? Number(l.valor_pago) : -Number(l.valor_pago)
+      }
+      for (const a of ajustesAntesRes.data || []) {
+        base += Number(a.valor)
+      }
+      setSaldoInicial(base)
 
-      for (const l of lancRes.data) {
-        const mes = (l.data_pagamento || '').substring(0, 7)
-        if (!novoTotalPorMes[mes]) continue
-
-        const catNome = l.categorias?.nome || '(Sem categoria)'
-        const catId = l.categoria_id || `sem_categoria_${l.tipo}`
-        const financiamento = l.categorias?.natureza === 'nao_operacional'
-        const isEntrada = l.tipo === 'receber'
-        const valor = Number(l.valor_pago)
-
-        let alvo
-        if (isEntrada && !financiamento) alvo = novasEntradasOp
-        else if (isEntrada && financiamento) alvo = novasEntradasFinanc
-        else if (!isEntrada && !financiamento) alvo = novasSaidasOp
-        else alvo = novasSaidasFinanc
-
-        if (!alvo[catId]) alvo[catId] = { nome: catNome, porMes: {}, total: 0 }
-        alvo[catId].porMes[mes] = (alvo[catId].porMes[mes] || 0) + valor
-        alvo[catId].total += valor
-
-        const chave = isEntrada
-          ? financiamento
-            ? 'entradaFinanc'
-            : 'entradaOp'
-          : financiamento
-          ? 'saidaFinanc'
-          : 'saidaOp'
-        novoTotalPorMes[mes][chave] += valor
+      const todos = []
+      for (const l of lancPeriodoRes.data) {
+        todos.push({
+          data: l.data_pagamento,
+          descricao: l.descricao,
+          categoria: l.categorias?.nome || '',
+          entrada: l.tipo === 'receber' ? Number(l.valor_pago) : 0,
+          saida: l.tipo === 'pagar' ? Number(l.valor_pago) : 0,
+        })
+      }
+      for (const a of ajustesPeriodoRes.data || []) {
+        const valor = Number(a.valor)
+        todos.push({
+          data: a.data,
+          descricao: `${a.motivo}${a.observacoes ? ` — ${a.observacoes}` : ''}`,
+          categoria: 'Ajuste de caixa',
+          entrada: valor > 0 ? valor : 0,
+          saida: valor < 0 ? -valor : 0,
+        })
       }
 
-      for (const a of ajustesRes.data || []) {
-        const mes = (a.data || '').substring(0, 7)
-        if (!novoTotalPorMes[mes]) continue
-        novoTotalPorMes[mes].ajuste += Number(a.valor)
-      }
+      // ordem cronológica (mais antigo primeiro) — é assim que um fluxo de caixa real se lê
+      todos.sort((a, b) => (a.data || '').localeCompare(b.data || ''))
 
-      setEntradasOp(novasEntradasOp)
-      setSaidasOp(novasSaidasOp)
-      setEntradasFinanc(novasEntradasFinanc)
-      setSaidasFinanc(novasSaidasFinanc)
-      setAjustes(ajustesRes.data || [])
-      setTotalPorMes(novoTotalPorMes)
+      let acumulado = base
+      const comSaldo = todos.map((m) => {
+        acumulado += m.entrada - m.saida
+        return { ...m, saldoApos: acumulado }
+      })
+
+      setMovimentos(comSaldo)
       setLoading(false)
     }
     carregar()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mesInicio, mesFim])
+  }, [dataInicio, dataFim])
+
+  const totalEntradas = movimentos.reduce((acc, m) => acc + m.entrada, 0)
+  const totalSaidas = movimentos.reduce((acc, m) => acc + m.saida, 0)
+  const saldoFinal = movimentos.length > 0 ? movimentos[movimentos.length - 1].saldoApos : saldoInicial
 
   function aplicarPreset(preset) {
-    const hoje = mesAtualISO()
+    const hoje = new Date()
     if (preset === 'mes') {
-      setMesInicio(hoje)
-      setMesFim(hoje)
-    } else if (preset === 'trimestre') {
-      setMesInicio(addMonthsISO(`${hoje}-01`, -2).substring(0, 7))
-      setMesFim(hoje)
-    } else if (preset === 'ano') {
-      setMesInicio(`${hoje.substring(0, 4)}-01`)
-      setMesFim(hoje)
+      setDataInicio(primeiroDiaMesAtual())
+      setDataFim(ultimoDiaMesAtual())
+    } else if (preset === 'semana') {
+      const diaSemana = hoje.getDay() // 0 = domingo
+      const seg = new Date(hoje)
+      seg.setDate(hoje.getDate() - ((diaSemana + 6) % 7))
+      const dom = new Date(seg)
+      dom.setDate(seg.getDate() + 6)
+      setDataInicio(seg.toISOString().substring(0, 10))
+      setDataFim(dom.toISOString().substring(0, 10))
+    } else if (preset === 'hoje') {
+      setDataInicio(todayISO())
+      setDataFim(todayISO())
     }
-  }
-
-  const totalEntradaOp = Object.values(totalPorMes).reduce((acc, m) => acc + m.entradaOp, 0)
-  const totalSaidaOp = Object.values(totalPorMes).reduce((acc, m) => acc + m.saidaOp, 0)
-  const totalEntradaFinanc = Object.values(totalPorMes).reduce((acc, m) => acc + m.entradaFinanc, 0)
-  const totalSaidaFinanc = Object.values(totalPorMes).reduce((acc, m) => acc + m.saidaFinanc, 0)
-  const totalAjustes = Object.values(totalPorMes).reduce((acc, m) => acc + m.ajuste, 0)
-  const caixaOperacional = totalEntradaOp - totalSaidaOp
-  const caixaFinanciamento = totalEntradaFinanc - totalSaidaFinanc
-  const variacaoCaixa = caixaOperacional + caixaFinanciamento + totalAjustes
-
-  const temFinanciamento = Object.keys(entradasFinanc).length > 0 || Object.keys(saidasFinanc).length > 0
-  const temAjustes = ajustes.length > 0
-
-  function linhasOrdenadas(mapa) {
-    return Object.values(mapa).sort((a, b) => b.total - a.total)
   }
 
   function exportarExcel() {
-    const linhas = []
-    linhas.push(['Categoria', ...meses.map(formatMesLabel), 'Total'])
-
-    linhas.push(['ATIVIDADES OPERACIONAIS'])
-    linhas.push(['Entradas'])
-    linhasOrdenadas(entradasOp).forEach((r) => linhas.push([r.nome, ...meses.map((m) => r.porMes[m] || 0), r.total]))
-    linhas.push(['Saídas'])
-    linhasOrdenadas(saidasOp).forEach((d) => linhas.push([d.nome, ...meses.map((m) => -(d.porMes[m] || 0)), -d.total]))
-    linhas.push(['Caixa Gerado nas Atividades Operacionais', ...meses.map((m) => (totalPorMes[m]?.entradaOp || 0) - (totalPorMes[m]?.saidaOp || 0)), caixaOperacional])
+    const linhas = [['Data', 'Descrição', 'Categoria', 'Entrada', 'Saída', 'Saldo Acumulado']]
+    linhas.push(['', 'Saldo inicial do período', '', '', '', saldoInicial])
+    movimentos.forEach((m) => {
+      linhas.push([formatDateBR(m.data), m.descricao, m.categoria, m.entrada || '', m.saida || '', m.saldoApos])
+    })
     linhas.push([])
-
-    if (temFinanciamento) {
-      linhas.push(['ATIVIDADES DE FINANCIAMENTO (empréstimos, aportes)'])
-      linhasOrdenadas(entradasFinanc).forEach((r) => linhas.push([r.nome, ...meses.map((m) => r.porMes[m] || 0), r.total]))
-      linhasOrdenadas(saidasFinanc).forEach((d) => linhas.push([d.nome, ...meses.map((m) => -(d.porMes[m] || 0)), -d.total]))
-      linhas.push(['Caixa das Atividades de Financiamento', ...meses.map((m) => (totalPorMes[m]?.entradaFinanc || 0) - (totalPorMes[m]?.saidaFinanc || 0)), caixaFinanciamento])
-      linhas.push([])
-    }
-
-    if (temAjustes) {
-      linhas.push(['AJUSTES DE CAIXA'])
-      ajustes.forEach((a) => linhas.push([a.motivo, a.data, Number(a.valor)]))
-      linhas.push(['Total Ajustes', ...meses.map((m) => totalPorMes[m]?.ajuste || 0), totalAjustes])
-      linhas.push([])
-    }
-
-    linhas.push(['VARIAÇÃO DE CAIXA DO PERÍODO', ...meses.map((m) => (totalPorMes[m]?.entradaOp || 0) - (totalPorMes[m]?.saidaOp || 0) + (totalPorMes[m]?.entradaFinanc || 0) - (totalPorMes[m]?.saidaFinanc || 0) + (totalPorMes[m]?.ajuste || 0)), variacaoCaixa])
+    linhas.push(['', 'Total de Entradas', '', totalEntradas])
+    linhas.push(['', 'Total de Saídas', '', '', totalSaidas])
+    linhas.push(['', 'Saldo Final do Período', '', '', '', saldoFinal])
 
     const ws = XLSX.utils.aoa_to_sheet(linhas)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Fluxo de Caixa')
-    XLSX.writeFile(wb, `FluxoCaixa_${mesInicio}_a_${mesFim}.xlsx`)
+    XLSX.writeFile(wb, `FluxoCaixa_${dataInicio}_a_${dataFim}.xlsx`)
   }
 
   return (
-    <div className="max-w-5xl">
+    <div className="max-w-4xl">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 gap-2">
-        <h2 className="text-2xl font-bold text-gray-900">Fluxo de Caixa — Regime de Caixa</h2>
+        <h2 className="text-2xl font-bold text-gray-900">Fluxo de Caixa</h2>
         <button
           onClick={exportarExcel}
           disabled={loading}
@@ -188,21 +152,36 @@ export default function FluxoCaixa() {
         </button>
       </div>
       <p className="text-gray-500 text-sm mb-4">
-        Baseado na data de pagamento (só considera o que realmente entrou/saiu do caixa). Transferências entre suas
-        próprias contas não entram aqui, pois não alteram o caixa total.
+        Movimento real de caixa, dia a dia — todas as contas somadas. Transferências entre suas próprias contas não
+        aparecem aqui (não mudam o total em caixa).
       </p>
 
-      <div className="flex items-center gap-3 mb-6 flex-wrap bg-white border border-gray-200 rounded-lg p-3">
+      <div className="flex items-center gap-3 mb-4 flex-wrap bg-white border border-gray-200 rounded-lg p-3">
         <div className="flex items-center gap-2">
           <label className="text-xs text-gray-500">De:</label>
-          <input type="month" value={mesInicio} onChange={(e) => setMesInicio(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-1 text-sm" />
+          <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-1 text-sm" />
           <label className="text-xs text-gray-500">até:</label>
-          <input type="month" value={mesFim} onChange={(e) => setMesFim(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-1 text-sm" />
+          <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-1 text-sm" />
         </div>
         <div className="flex gap-2 sm:ml-auto">
-          <button onClick={() => aplicarPreset('mes')} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-full hover:bg-gray-200">Mês atual</button>
-          <button onClick={() => aplicarPreset('trimestre')} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-full hover:bg-gray-200">Trimestre atual</button>
-          <button onClick={() => aplicarPreset('ano')} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-full hover:bg-gray-200">Ano atual</button>
+          <button onClick={() => aplicarPreset('hoje')} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-full hover:bg-gray-200">Hoje</button>
+          <button onClick={() => aplicarPreset('semana')} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-full hover:bg-gray-200">Esta semana</button>
+          <button onClick={() => aplicarPreset('mes')} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-full hover:bg-gray-200">Este mês</button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="bg-white border border-gray-200 rounded-lg p-3">
+          <p className="text-xs text-gray-500">Entradas no período</p>
+          <p className="text-lg font-bold text-green-600">{formatCurrencyBRL(totalEntradas)}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-3">
+          <p className="text-xs text-gray-500">Saídas no período</p>
+          <p className="text-lg font-bold text-red-600">{formatCurrencyBRL(totalSaidas)}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-3">
+          <p className="text-xs text-gray-500">Saldo final do período</p>
+          <p className="text-lg font-bold text-gray-900">{formatCurrencyBRL(saldoFinal)}</p>
         </div>
       </div>
 
@@ -210,106 +189,51 @@ export default function FluxoCaixa() {
 
       {loading ? (
         <p className="text-gray-400 text-sm">Carregando...</p>
-      ) : meses.length === 0 ? (
-        <p className="text-gray-400 text-sm">Selecione um período válido (de/até).</p>
       ) : (
         <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 text-left text-xs text-gray-500">
-                <th className="px-4 py-2 min-w-[200px]">Categoria</th>
-                {meses.map((m) => (
-                  <th key={m} className="px-3 py-2 text-right whitespace-nowrap">{formatMesLabel(m)}</th>
-                ))}
-                <th className="px-3 py-2 text-right whitespace-nowrap font-semibold">Total</th>
+                <th className="px-4 py-2">Data</th>
+                <th className="px-4 py-2">Descrição</th>
+                <th className="px-4 py-2 text-right">Entrada</th>
+                <th className="px-4 py-2 text-right">Saída</th>
+                <th className="px-4 py-2 text-right">Saldo</th>
               </tr>
             </thead>
             <tbody>
-              <LinhaSecao texto="ATIVIDADES OPERACIONAIS" />
-              <LinhaSubSecao texto="Entradas" />
-              {linhasOrdenadas(entradasOp).map((r, i) => (
-                <LinhaCategoria key={i} nome={r.nome} porMes={r.porMes} total={r.total} meses={meses} />
-              ))}
-              <LinhaSubSecao texto="Saídas" />
-              {linhasOrdenadas(saidasOp).map((d, i) => (
-                <LinhaCategoria key={i} nome={d.nome} porMes={d.porMes} total={d.total} meses={meses} negativo />
-              ))}
-              <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold">
-                <td className="px-4 py-3 text-gray-900">Caixa Gerado nas Atividades Operacionais</td>
-                {meses.map((m) => {
-                  const valor = (totalPorMes[m]?.entradaOp || 0) - (totalPorMes[m]?.saidaOp || 0)
-                  return (
-                    <td key={m} className={`px-3 py-3 text-right whitespace-nowrap ${valor < 0 ? 'text-red-600' : 'text-green-700'}`}>
-                      {formatCurrencyBRL(valor)}
-                    </td>
-                  )
-                })}
-                <td className={`px-3 py-3 text-right whitespace-nowrap ${caixaOperacional < 0 ? 'text-red-600' : 'text-green-700'}`}>
-                  {formatCurrencyBRL(caixaOperacional)}
-                </td>
+              <tr className="bg-gray-50 font-medium">
+                <td className="px-4 py-2 text-gray-500" colSpan={4}>Saldo inicial do período</td>
+                <td className="px-4 py-2 text-right text-gray-800">{formatCurrencyBRL(saldoInicial)}</td>
               </tr>
-
-              {temFinanciamento && (
-                <>
-                  <tr><td colSpan={meses.length + 2} className="py-2"></td></tr>
-                  <LinhaSecao texto="ATIVIDADES DE FINANCIAMENTO (empréstimos, aportes)" />
-                  {linhasOrdenadas(entradasFinanc).map((r, i) => (
-                    <LinhaCategoria key={i} nome={r.nome} porMes={r.porMes} total={r.total} meses={meses} />
-                  ))}
-                  {linhasOrdenadas(saidasFinanc).map((d, i) => (
-                    <LinhaCategoria key={i} nome={d.nome} porMes={d.porMes} total={d.total} meses={meses} negativo />
-                  ))}
-                  <tr className="border-t border-gray-200 bg-gray-50 font-semibold">
-                    <td className="px-4 py-2 text-gray-800">Caixa das Atividades de Financiamento</td>
-                    {meses.map((m) => {
-                      const valor = (totalPorMes[m]?.entradaFinanc || 0) - (totalPorMes[m]?.saidaFinanc || 0)
-                      return (
-                        <td key={m} className={`px-3 py-2 text-right whitespace-nowrap ${valor < 0 ? 'text-red-600' : 'text-gray-800'}`}>
-                          {formatCurrencyBRL(valor)}
-                        </td>
-                      )
-                    })}
-                    <td className={`px-3 py-2 text-right whitespace-nowrap ${caixaFinanciamento < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                      {formatCurrencyBRL(caixaFinanciamento)}
-                    </td>
-                  </tr>
-                </>
+              {movimentos.map((m, i) => (
+                <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                  <td className="px-4 py-2 whitespace-nowrap text-gray-600">{formatDateBR(m.data)}</td>
+                  <td className="px-4 py-2 text-gray-800">
+                    {m.descricao}
+                    {m.categoria && <span className="text-gray-400"> · {m.categoria}</span>}
+                  </td>
+                  <td className="px-4 py-2 text-right whitespace-nowrap text-green-600">
+                    {m.entrada ? formatCurrencyBRL(m.entrada) : ''}
+                  </td>
+                  <td className="px-4 py-2 text-right whitespace-nowrap text-red-600">
+                    {m.saida ? formatCurrencyBRL(m.saida) : ''}
+                  </td>
+                  <td className="px-4 py-2 text-right whitespace-nowrap font-semibold text-gray-800">
+                    {formatCurrencyBRL(m.saldoApos)}
+                  </td>
+                </tr>
+              ))}
+              {movimentos.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-4 text-center text-gray-400 text-sm">
+                    Nenhuma movimentação nesse período.
+                  </td>
+                </tr>
               )}
-
-              {temAjustes && (
-                <>
-                  <tr><td colSpan={meses.length + 2} className="py-2"></td></tr>
-                  <LinhaSecao texto="AJUSTES DE CAIXA" />
-                  <tr className="border-t border-gray-200 bg-gray-50 font-semibold">
-                    <td className="px-4 py-2 text-gray-800">Total Ajustes</td>
-                    {meses.map((m) => (
-                      <td key={m} className="px-3 py-2 text-right whitespace-nowrap text-gray-800">
-                        {formatCurrencyBRL(totalPorMes[m]?.ajuste || 0)}
-                      </td>
-                    ))}
-                    <td className="px-3 py-2 text-right whitespace-nowrap text-gray-900">{formatCurrencyBRL(totalAjustes)}</td>
-                  </tr>
-                </>
-              )}
-
-              <tr className="border-t-2 border-gray-400 bg-primary-50 font-bold">
-                <td className="px-4 py-3 text-gray-900">Variação de Caixa do Período</td>
-                {meses.map((m) => {
-                  const valor =
-                    (totalPorMes[m]?.entradaOp || 0) -
-                    (totalPorMes[m]?.saidaOp || 0) +
-                    (totalPorMes[m]?.entradaFinanc || 0) -
-                    (totalPorMes[m]?.saidaFinanc || 0) +
-                    (totalPorMes[m]?.ajuste || 0)
-                  return (
-                    <td key={m} className={`px-3 py-3 text-right whitespace-nowrap ${valor < 0 ? 'text-red-600' : 'text-green-700'}`}>
-                      {formatCurrencyBRL(valor)}
-                    </td>
-                  )
-                })}
-                <td className={`px-3 py-3 text-right whitespace-nowrap ${variacaoCaixa < 0 ? 'text-red-600' : 'text-green-700'}`}>
-                  {formatCurrencyBRL(variacaoCaixa)}
-                </td>
+              <tr className="border-t-2 border-gray-300 bg-primary-50 font-bold">
+                <td className="px-4 py-3 text-gray-900" colSpan={4}>Saldo Final do Período</td>
+                <td className="px-4 py-3 text-right whitespace-nowrap text-gray-900">{formatCurrencyBRL(saldoFinal)}</td>
               </tr>
             </tbody>
           </table>
@@ -319,46 +243,10 @@ export default function FluxoCaixa() {
       <div className="mt-4 flex items-start gap-2 text-xs text-gray-400">
         <Wallet size={14} className="shrink-0 mt-0.5" />
         <p>
-          Diferente do DRE (que olha quando a receita/despesa foi gerada), o Fluxo de Caixa olha só o que realmente
-          entrou ou saiu do bolso, na data em que o pagamento aconteceu de verdade.
+          Cada linha é um recebimento/pagamento que realmente aconteceu (baseado na data de pagamento), na ordem em
+          que ocorreu. O saldo acumulado mostra o dinheiro em caixa após cada movimento.
         </p>
       </div>
     </div>
-  )
-}
-
-function LinhaSecao({ texto }) {
-  return (
-    <tr>
-      <td className="px-4 py-2 font-semibold text-gray-500 text-xs tracking-wide" colSpan={99}>
-        {texto}
-      </td>
-    </tr>
-  )
-}
-
-function LinhaSubSecao({ texto }) {
-  return (
-    <tr>
-      <td className="px-4 py-1 font-medium text-gray-400 text-[11px] uppercase tracking-wide" colSpan={99}>
-        {texto}
-      </td>
-    </tr>
-  )
-}
-
-function LinhaCategoria({ nome, porMes, total, meses, negativo }) {
-  return (
-    <tr className="border-b border-gray-50 hover:bg-gray-50">
-      <td className="pl-6 pr-4 py-1.5 text-gray-700">{nome}</td>
-      {meses.map((m) => (
-        <td key={m} className="px-3 py-1.5 text-right whitespace-nowrap text-gray-600">
-          {porMes[m] ? formatCurrencyBRL(porMes[m]) : '—'}
-        </td>
-      ))}
-      <td className={`px-3 py-1.5 text-right whitespace-nowrap font-medium ${negativo ? 'text-red-600' : 'text-gray-800'}`}>
-        {formatCurrencyBRL(total)}
-      </td>
-    </tr>
   )
 }
