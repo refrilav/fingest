@@ -34,6 +34,7 @@ const CAMPOS_VAZIOS = {
   categoria_id: '',
   centro_custo_id: '',
   descricao_problema: '',
+  mostrar_problema_na_impressao: true,
   endereco: '',
   observacoes: '',
   data_abertura: todayISO(),
@@ -101,6 +102,7 @@ export default function OrdensServico() {
       categoria_id: form.categoria_id || null,
       centro_custo_id: form.centro_custo_id || null,
       descricao_problema: form.descricao_problema.trim(),
+      mostrar_problema_na_impressao: form.mostrar_problema_na_impressao,
       endereco: form.endereco || null,
       observacoes: form.observacoes || null,
       data_abertura: form.data_abertura,
@@ -125,6 +127,7 @@ export default function OrdensServico() {
       categoria_id: os.categoria_id || '',
       centro_custo_id: os.centro_custo_id || '',
       descricao_problema: os.descricao_problema || '',
+      mostrar_problema_na_impressao: os.mostrar_problema_na_impressao ?? true,
       endereco: os.endereco || '',
       observacoes: os.observacoes || '',
       data_abertura: os.data_abertura,
@@ -410,6 +413,14 @@ export default function OrdensServico() {
             rows={2}
             required
           />
+          <label className="col-span-1 sm:col-span-2 flex items-center gap-1.5 text-xs text-gray-500 -mt-2">
+            <input
+              type="checkbox"
+              checked={form.mostrar_problema_na_impressao}
+              onChange={(e) => setForm({ ...form, mostrar_problema_na_impressao: e.target.checked })}
+            />
+            Mostrar essa descrição na impressão da OS
+          </label>
 
           <input
             placeholder="Endereço do atendimento"

@@ -10,6 +10,12 @@ export default function ImprimirOS() {
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
 
+  // Opções do que aparece na impressão (ajustável na hora, além da preferência salva na OS)
+  const [mostrarProblema, setMostrarProblema] = useState(true)
+  const [mostrarServicos, setMostrarServicos] = useState(true)
+  const [mostrarPecas, setMostrarPecas] = useState(true)
+  const [mostrarGarantia, setMostrarGarantia] = useState(true)
+
   useEffect(() => {
     async function carregar() {
       setLoading(true)
@@ -20,9 +26,15 @@ export default function ImprimirOS() {
         )
         .eq('id', id)
         .single()
-      if (error) setErro(error.message)
-      else setOs(data)
+      if (error) {
+        setErro(error.message)
+        setLoading(false)
+        return
+      }
+      setOs(data)
+      setMostrarProblema(data.mostrar_problema_na_impressao ?? true)
       setLoading(false)
+      document.title = `OS ${String(data.numero).padStart(5, '0')} - ${data.clientes?.nome || 'Refrilav'}`
     }
     carregar()
   }, [id])
@@ -39,10 +51,38 @@ export default function ImprimirOS() {
 
   return (
     <div className="max-w-2xl mx-auto py-6 px-4 print:p-0 print:max-w-full">
-      <div className="flex items-center justify-between mb-6 no-print">
-        <Link to="/ordens-servico" className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+      <div className="no-print mb-6">
+        <Link to="/ordens-servico" className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4">
           <ArrowLeft size={14} /> Voltar
         </Link>
+
+        <div className="bg-white border border-gray-200 rounded-lg p-3 mb-3">
+          <p className="text-xs font-medium text-gray-500 mb-2">O que aparece na impressão:</p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-700">
+            <label className="flex items-center gap-1.5">
+              <input type="checkbox" checked={mostrarProblema} onChange={(e) => setMostrarProblema(e.target.checked)} />
+              Problema relatado
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input type="checkbox" checked={mostrarServicos} onChange={(e) => setMostrarServicos(e.target.checked)} />
+              Serviços realizados
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input type="checkbox" checked={mostrarPecas} onChange={(e) => setMostrarPecas(e.target.checked)} />
+              Peças utilizadas
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input type="checkbox" checked={mostrarGarantia} onChange={(e) => setMostrarGarantia(e.target.checked)} />
+              Garantia
+            </label>
+          </div>
+        </div>
+
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 mb-3">
+          Dica: na janela de impressão do navegador, procure "Mais configurações" e desmarque
+          <strong> "Cabeçalhos e rodapés"</strong> — assim não sai data/hora/link no papel ou no PDF.
+        </div>
+
         <button
           onClick={() => window.print()}
           className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700"
@@ -84,19 +124,23 @@ export default function ImprimirOS() {
           </div>
         </div>
 
-        <div className="mb-6">
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Problema relatado</p>
-          <p className="text-sm text-gray-700 border border-gray-200 rounded-lg p-3 min-h-[3rem]">{os.descricao_problema}</p>
-        </div>
+        {mostrarProblema && (
+          <div className="mb-6">
+            <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Problema relatado</p>
+            <p className="text-sm text-gray-700 border border-gray-200 rounded-lg p-3 min-h-[3rem]">{os.descricao_problema}</p>
+          </div>
+        )}
 
-        <div className="mb-6">
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Serviços realizados</p>
-          <p className="text-sm text-gray-700 border border-gray-200 rounded-lg p-3 min-h-[3rem]">
-            {os.servicos_realizados || '—'}
-          </p>
-        </div>
+        {mostrarServicos && (
+          <div className="mb-6">
+            <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Serviços realizados</p>
+            <p className="text-sm text-gray-700 border border-gray-200 rounded-lg p-3 min-h-[3rem]">
+              {os.servicos_realizados || '—'}
+            </p>
+          </div>
+        )}
 
-        {(os.ordens_servico_pecas || []).length > 0 && (
+        {mostrarPecas && (os.ordens_servico_pecas || []).length > 0 && (
           <div className="mb-4">
             <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Peças utilizadas</p>
             <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
@@ -141,7 +185,7 @@ export default function ImprimirOS() {
           </div>
         </div>
 
-        {os.garantia_dias && (
+        {mostrarGarantia && os.garantia_dias && (
           <p className="text-sm text-gray-700 mb-6">
             <strong>Garantia:</strong> {os.garantia_dias} dias a partir da conclusão do serviço
             {os.data_conclusao ? ` (${formatDateBR(os.data_conclusao)})` : ''}.
@@ -159,6 +203,9 @@ export default function ImprimirOS() {
       </div>
 
       <style>{`
+        @page {
+          margin: 12mm;
+        }
         @media print {
           .no-print { display: none !important; }
           body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
