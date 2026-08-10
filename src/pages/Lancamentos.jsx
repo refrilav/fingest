@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO, isOverdue, addMonthsISO, getRangeMes, mesAtualISO } from '../lib/format'
 import { Plus, Trash2, CheckCircle2, X, Repeat, Pencil, Download, Search, BarChart3, Receipt } from 'lucide-react'
 import BuscaPessoa from '../components/BuscaPessoa'
+import SelectCategoria from '../components/SelectCategoria'
 
 const CAMPOS_VAZIOS = {
   descricao: '',
@@ -541,16 +542,16 @@ export default function Lancamentos({ tipo }) {
               )}
             </div>
           )}
-          <select
+          <SelectCategoria
+            tipo={tipoCategoria}
+            categorias={categorias}
             value={form.categoria_id}
-            onChange={(e) => setForm({ ...form, categoria_id: e.target.value })}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-          >
-            <option value="">Categoria...</option>
-            {categorias.map((c) => (
-              <option key={c.id} value={c.id}>{c.nome}</option>
-            ))}
-          </select>
+            onChange={(id) => setForm({ ...form, categoria_id: id })}
+            onCriada={(nova) => {
+              setCategorias((prev) => [...prev, nova].sort((a, b) => a.nome.localeCompare(b.nome)))
+              setForm((f) => ({ ...f, categoria_id: nova.id }))
+            }}
+          />
           <select
             value={form.centro_custo_id}
             onChange={(e) => setForm({ ...form, centro_custo_id: e.target.value })}

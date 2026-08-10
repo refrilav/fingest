@@ -4,6 +4,7 @@ import { parseOfx } from '../lib/parseOfx'
 import { formatDateBR, formatCurrencyBRL } from '../lib/format'
 import { Upload, Landmark, Check, Link2, X, Plus, AlertTriangle } from 'lucide-react'
 import BuscaPessoa from '../components/BuscaPessoa'
+import SelectCategoria from '../components/SelectCategoria'
 
 export default function Conciliacao() {
   const [contas, setContas] = useState([])
@@ -431,16 +432,19 @@ export default function Conciliacao() {
                       onChange={(e) => setNovoLancamento({ ...novoLancamento, descricao: e.target.value })}
                       className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
                     />
-                    <select
+                    <SelectCategoria
+                      tipo={novoLancamento.tipo === 'pagar' ? 'despesa' : 'receita'}
+                      categorias={categorias[novoLancamento.tipo === 'pagar' ? 'despesa' : 'receita']}
                       value={novoLancamento.categoria_id}
-                      onChange={(e) => setNovoLancamento({ ...novoLancamento, categoria_id: e.target.value })}
-                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                    >
-                      <option value="">Categoria...</option>
-                      {categorias[novoLancamento.tipo === 'pagar' ? 'despesa' : 'receita'].map((c) => (
-                        <option key={c.id} value={c.id}>{c.nome}</option>
-                      ))}
-                    </select>
+                      onChange={(id) => setNovoLancamento({ ...novoLancamento, categoria_id: id })}
+                      onCriada={(nova) => {
+                        setCategorias((prev) => ({
+                          ...prev,
+                          [nova.tipo]: [...prev[nova.tipo], nova].sort((a, b) => a.nome.localeCompare(b.nome)),
+                        }))
+                        setNovoLancamento((f) => ({ ...f, categoria_id: nova.id }))
+                      }}
+                    />
                     <select
                       value={novoLancamento.centro_custo_id}
                       onChange={(e) => setNovoLancamento({ ...novoLancamento, centro_custo_id: e.target.value })}

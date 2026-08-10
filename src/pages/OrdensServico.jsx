@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO } from '../lib/format'
 import BuscaPessoa from '../components/BuscaPessoa'
 import BuscaPeca from '../components/BuscaPeca'
+import SelectCategoria from '../components/SelectCategoria'
 import {
   Plus,
   Wrench,
@@ -423,16 +424,16 @@ export default function OrdensServico() {
             onChange={(e) => setForm({ ...form, data_abertura: e.target.value })}
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
-          <select
+          <SelectCategoria
+            tipo="receita"
+            categorias={categorias}
             value={form.categoria_id}
-            onChange={(e) => setForm({ ...form, categoria_id: e.target.value })}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-          >
-            <option value="">Serviço/categoria (opcional)...</option>
-            {categorias.map((c) => (
-              <option key={c.id} value={c.id}>{c.nome}</option>
-            ))}
-          </select>
+            onChange={(id) => setForm({ ...form, categoria_id: id })}
+            onCriada={(nova) => {
+              setCategorias((prev) => [...prev, nova].sort((a, b) => a.nome.localeCompare(b.nome)))
+              setForm((f) => ({ ...f, categoria_id: nova.id }))
+            }}
+          />
 
           <select
             value={form.centro_custo_id}
@@ -676,16 +677,16 @@ export default function OrdensServico() {
                         onChange={(e) => setConcluirForm({ ...concluirForm, valor_mao_de_obra: e.target.value })}
                         className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
                       />
-                      <select
+                      <SelectCategoria
+                        tipo="receita"
+                        categorias={categorias}
                         value={concluirForm.categoria_id}
-                        onChange={(e) => setConcluirForm({ ...concluirForm, categoria_id: e.target.value })}
-                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                      >
-                        <option value="">Serviço/categoria...</option>
-                        {categorias.map((c) => (
-                          <option key={c.id} value={c.id}>{c.nome}</option>
-                        ))}
-                      </select>
+                        onChange={(id) => setConcluirForm({ ...concluirForm, categoria_id: id })}
+                        onCriada={(nova) => {
+                          setCategorias((prev) => [...prev, nova].sort((a, b) => a.nome.localeCompare(b.nome)))
+                          setConcluirForm((f) => ({ ...f, categoria_id: nova.id }))
+                        }}
+                      />
                       <input
                         type="number"
                         placeholder="Garantia (dias, opcional)"

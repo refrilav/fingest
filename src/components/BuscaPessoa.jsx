@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { Search, X } from 'lucide-react'
+import { Search, X, UserPlus, Check } from 'lucide-react'
 
 // tabela: 'clientes' | 'fornecedores'
 // value: id selecionado (ou '')
@@ -12,10 +12,14 @@ export default function BuscaPessoa({ tabela, value, onChange, placeholder }) {
   const [resultados, setResultados] = useState([])
   const [aberto, setAberto] = useState(false)
   const [buscando, setBuscando] = useState(false)
+  const [criandoNovo, setCriandoNovo] = useState(false)
+  const [novoTelefone, setNovoTelefone] = useState('')
+  const [salvandoNovo, setSalvandoNovo] = useState(false)
   const timeoutRef = useRef(null)
   const containerRef = useRef(null)
 
-  // Se já vier um "value" (edição, ou setado por fora), busca o nome/telefone pra exibir
+  const rotulo = tabela === 'clientes' ? 'cliente' : 'fornecedor'
+
   useEffect(() => {
     if (!value) {
       setNomeSelecionado('')
@@ -35,11 +39,11 @@ export default function BuscaPessoa({ tabela, value, onChange, placeholder }) {
       })
   }, [value, tabela])
 
-  // Fecha o dropdown se clicar fora
   useEffect(() => {
     function handleClickFora(e) {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
         setAberto(false)
+        setCriandoNovo(false)
       }
     }
     document.addEventListener('mousedown', handleClickFora)
@@ -49,6 +53,7 @@ export default function BuscaPessoa({ tabela, value, onChange, placeholder }) {
   function handleDigitar(texto) {
     setQuery(texto)
     setAberto(true)
+    setCriandoNovo(false)
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
 
@@ -60,7 +65,6 @@ export default function BuscaPessoa({ tabela, value, onChange, placeholder }) {
     setBuscando(true)
     timeoutRef.current = setTimeout(async () => {
       const termo = texto.trim()
-      // Busca por nome, telefone OU endereço, todos no servidor
       const { data } = await supabase
         .from(tabela)
         .select('id, nome, telefone, endereco')
@@ -70,7 +74,7 @@ export default function BuscaPessoa({ tabela, value, onChange, placeholder }) {
         .limit(20)
       setResultados(data || [])
       setBuscando(false)
-    }, 300) // debounce: espera parar de digitar antes de consultar o banco
+    }, 300)
   }
 
   function selecionar(pessoa) {
@@ -86,6 +90,28 @@ export default function BuscaPessoa({ tabela, value, onChange, placeholder }) {
     setNomeSelecionado('')
     setTelefoneSelecionado('')
     setQuery('')
+  }
+
+  function abrirCriacao() {
+    setCriandoNovo(true)
+    setNovoTelefone('')
+  }
+
+  async function salvarNovo() {
+    if (!query.trim()) return
+    setSalvandoNovo(true)
+    const { data, error } = await supabase
+      .from(tabela)
+      .insert({ nome: query.trim(), telefone: novoTelefone || null })
+      .select()
+      .single()
+    setSalvandoNovo(false)
+    if (error) {
+      alert(`Não consegui cadastrar: ${error.message}`)
+      return
+    }
+    selecionar(data)
+    setCriandoNovo(false)
   }
 
   return (
@@ -115,27 +141,70 @@ export default function BuscaPessoa({ tabela, value, onChange, placeholder }) {
       )}
 
       {aberto && query.trim().length >= 2 && (
-        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
           {buscando ? (
             <p className="px-3 py-2 text-sm text-gray-400">Buscando...</p>
-          ) : resultados.length === 0 ? (
-            <p className="px-3 py-2 text-sm text-gray-400">Nenhum resultado para "{query}".</p>
           ) : (
-            resultados.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => selecionar(p)}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-primary-50 text-gray-700"
-              >
-                <span className="block">{p.nome}</span>
-                {(p.telefone || p.endereco) && (
-                  <span className="block text-xs text-gray-400">
-                    {[p.telefone, p.endereco].filter(Boolean).join(' · ')}
-                  </span>
-                )}
-              </button>
-            ))
+            <>
+              {resultados.length === 0 && !criandoNovo && (
+                <p className="px-3 py-2 text-sm text-gray-400">Nenhum resultado para "{query}".</p>
+              )}
+              {resultados.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => selecionar(p)}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-primary-50 text-gray-700"
+                >
+                  <span className="block">{p.nome}</span>
+                  {(p.telefone || p.endereco) && (
+                    <span className="block text-xs text-gray-400">
+                      {[p.telefone, p.endereco].filter(Boolean).join(' · ')}
+                    </span>
+                  )}
+                </button>
+              ))}
+
+              {!criandoNovo ? (
+                <button
+                  type="button"
+                  onClick={abrirCriacao}
+                  className="w-full flex items-center gap-2 text-left px-3 py-2 text-sm text-primary-700 hover:bg-primary-50 border-t border-gray-100"
+                >
+                  <UserPlus size={14} />
+                  Cadastrar "{query}" como novo {rotulo}
+                </button>
+              ) : (
+                <div className="p-2 border-t border-gray-100 bg-gray-50">
+                  <p className="text-xs text-gray-500 mb-1.5">Novo {rotulo}: <strong>{query}</strong></p>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={novoTelefone}
+                      onChange={(e) => setNovoTelefone(e.target.value)}
+                      placeholder="Telefone (opcional)"
+                      className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={salvarNovo}
+                      disabled={salvandoNovo}
+                      className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-2.5 py-1.5 text-xs font-medium hover:bg-primary-700 disabled:opacity-60"
+                    >
+                      <Check size={13} /> Salvar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCriandoNovo(false)}
+                      className="text-gray-400 hover:text-gray-600 p-1.5"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
