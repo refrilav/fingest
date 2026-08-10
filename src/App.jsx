@@ -31,6 +31,22 @@ function Rotas() {
     <Routes>
       <Route path="/login" element={session ? <Navigate to="/" replace /> : <Login />} />
       <Route
+        path="/ordens-servico/:id/imprimir"
+        element={
+          <RotaProtegida>
+            <ImprimirOS />
+          </RotaProtegida>
+        }
+      />
+      <Route
+        path="/recibo/:id"
+        element={
+          <RotaProtegida>
+            <Recibo />
+          </RotaProtegida>
+        }
+      />
+      <Route
         path="/"
         element={
           <RotaProtegida>
@@ -41,8 +57,6 @@ function Rotas() {
         <Route index element={<Dashboard />} />
         <Route path="ordens-servico" element={<OrdensServico />} />
         <Route path="estoque" element={<Estoque />} />
-        <Route path="ordens-servico/:id/imprimir" element={<ImprimirOS />} />
-        <Route path="recibo/:id" element={<Recibo />} />
         <Route path="contas-a-pagar" element={<Lancamentos tipo="pagar" />} />
         <Route path="contas-a-receber" element={<Lancamentos tipo="receber" />} />
         <Route path="conciliacao" element={<Conciliacao />} />
