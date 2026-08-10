@@ -8,25 +8,30 @@ import { Search, X } from 'lucide-react'
 export default function BuscaPessoa({ tabela, value, onChange, placeholder }) {
   const [query, setQuery] = useState('')
   const [nomeSelecionado, setNomeSelecionado] = useState('')
+  const [telefoneSelecionado, setTelefoneSelecionado] = useState('')
   const [resultados, setResultados] = useState([])
   const [aberto, setAberto] = useState(false)
   const [buscando, setBuscando] = useState(false)
   const timeoutRef = useRef(null)
   const containerRef = useRef(null)
 
-  // Se já vier um "value" (edição, ou setado por fora), busca o nome pra exibir
+  // Se já vier um "value" (edição, ou setado por fora), busca o nome/telefone pra exibir
   useEffect(() => {
     if (!value) {
       setNomeSelecionado('')
+      setTelefoneSelecionado('')
       return
     }
     supabase
       .from(tabela)
-      .select('nome')
+      .select('nome, telefone')
       .eq('id', value)
       .single()
       .then(({ data }) => {
-        if (data) setNomeSelecionado(data.nome)
+        if (data) {
+          setNomeSelecionado(data.nome)
+          setTelefoneSelecionado(data.telefone || '')
+        }
       })
   }, [value, tabela])
 
@@ -54,11 +59,13 @@ export default function BuscaPessoa({ tabela, value, onChange, placeholder }) {
 
     setBuscando(true)
     timeoutRef.current = setTimeout(async () => {
+      const termo = texto.trim()
+      // Busca por nome, telefone OU endereço, todos no servidor
       const { data } = await supabase
         .from(tabela)
-        .select('id, nome')
+        .select('id, nome, telefone, endereco')
         .eq('ativo', true)
-        .ilike('nome', `%${texto.trim()}%`)
+        .or(`nome.ilike.%${termo}%,telefone.ilike.%${termo}%,endereco.ilike.%${termo}%`)
         .order('nome')
         .limit(20)
       setResultados(data || [])
@@ -69,6 +76,7 @@ export default function BuscaPessoa({ tabela, value, onChange, placeholder }) {
   function selecionar(pessoa) {
     onChange(pessoa.id)
     setNomeSelecionado(pessoa.nome)
+    setTelefoneSelecionado(pessoa.telefone || '')
     setQuery('')
     setAberto(false)
   }
@@ -76,6 +84,7 @@ export default function BuscaPessoa({ tabela, value, onChange, placeholder }) {
   function limpar() {
     onChange('')
     setNomeSelecionado('')
+    setTelefoneSelecionado('')
     setQuery('')
   }
 
@@ -83,7 +92,10 @@ export default function BuscaPessoa({ tabela, value, onChange, placeholder }) {
     <div ref={containerRef} className="relative col-span-1 sm:col-span-2">
       {nomeSelecionado && !aberto ? (
         <div className="flex items-center justify-between rounded-lg border border-gray-300 px-3 py-2 text-sm bg-gray-50">
-          <span className="text-gray-800">{nomeSelecionado}</span>
+          <span className="text-gray-800">
+            {nomeSelecionado}
+            {telefoneSelecionado && <span className="text-gray-400"> · {telefoneSelecionado}</span>}
+          </span>
           <button type="button" onClick={limpar} className="text-gray-400 hover:text-red-600">
             <X size={14} />
           </button>
@@ -96,7 +108,7 @@ export default function BuscaPessoa({ tabela, value, onChange, placeholder }) {
             value={query}
             onChange={(e) => handleDigitar(e.target.value)}
             onFocus={() => setAberto(true)}
-            placeholder={placeholder}
+            placeholder={placeholder || 'Buscar por nome, telefone ou endereço...'}
             className="w-full rounded-lg border border-gray-300 pl-8 pr-3 py-2 text-sm"
           />
         </div>
@@ -116,7 +128,12 @@ export default function BuscaPessoa({ tabela, value, onChange, placeholder }) {
                 onClick={() => selecionar(p)}
                 className="w-full text-left px-3 py-2 text-sm hover:bg-primary-50 text-gray-700"
               >
-                {p.nome}
+                <span className="block">{p.nome}</span>
+                {(p.telefone || p.endereco) && (
+                  <span className="block text-xs text-gray-400">
+                    {[p.telefone, p.endereco].filter(Boolean).join(' · ')}
+                  </span>
+                )}
               </button>
             ))
           )}
