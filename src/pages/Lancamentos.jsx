@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO, isOverdue, addMonthsISO, getRangeMes, mesAtualISO } from '../lib/format'
-import { Plus, Trash2, CheckCircle2, X, Repeat, Pencil, Download, Search, BarChart3 } from 'lucide-react'
+import { Plus, Trash2, CheckCircle2, X, Repeat, Pencil, Download, Search, BarChart3, Receipt } from 'lucide-react'
 import BuscaPessoa from '../components/BuscaPessoa'
 
 const CAMPOS_VAZIOS = {
@@ -781,6 +782,15 @@ export default function Lancamentos({ tipo }) {
                       <button onClick={() => cancelar(item)} className="text-gray-400 hover:text-orange-500 p-1 rounded">
                         <X size={16} />
                       </button>
+                    )}
+                    {tipo === 'receber' && item.status === 'pago' && (
+                      <Link
+                        to={`/recibo/${item.id}`}
+                        title="Ver / imprimir recibo"
+                        className="text-gray-400 hover:text-primary-600 p-1 rounded"
+                      >
+                        <Receipt size={16} />
+                      </Link>
                     )}
                     <button
                       onClick={() => iniciarEdicao(item)}
