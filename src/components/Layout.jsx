@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
+  ClipboardList,
   ArrowDownCircle,
   ArrowUpCircle,
   Landmark,
@@ -19,6 +20,7 @@ import { useAuth } from '../lib/AuthContext'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/ordens-servico', label: 'Ordens de Serviço', icon: ClipboardList },
   { to: '/contas-a-pagar', label: 'Contas a Pagar', icon: ArrowUpCircle },
   { to: '/contas-a-receber', label: 'Contas a Receber', icon: ArrowDownCircle },
   { to: '/conciliacao', label: 'Conciliação Bancária', icon: Landmark },
