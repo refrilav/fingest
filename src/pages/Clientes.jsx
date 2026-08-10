@@ -1,9 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Plus, Trash2, Upload, Search, X } from 'lucide-react'
+import { Plus, Trash2, Upload, Search, X, Pencil } from 'lucide-react'
 
-const CAMPOS_VAZIOS = { nome: '', documento: '', telefone: '', email: '', observacoes: '' }
+const CAMPOS_VAZIOS = {
+  nome: '',
+  documento: '',
+  telefone: '',
+  email: '',
+  endereco: '',
+  bairro: '',
+  cidade: '',
+  observacoes: '',
+}
 const LIMITE_PADRAO = 100
 
 export default function Clientes() {
@@ -12,6 +21,7 @@ export default function Clientes() {
   const [erro, setErro] = useState(null)
   const [form, setForm] = useState(CAMPOS_VAZIOS)
   const [mostrarForm, setMostrarForm] = useState(false)
+  const [editandoId, setEditandoId] = useState(null)
   const [busca, setBusca] = useState('')
   const [buscando, setBuscando] = useState(false)
   const [totalGeral, setTotalGeral] = useState(null)
@@ -22,8 +32,9 @@ export default function Clientes() {
     let query = supabase.from('clientes').select('*').eq('ativo', true).order('nome')
 
     if (termoBusca.trim().length >= 2) {
-      // Busca por nome OU telefone, direto no servidor (não depende de carregar tudo)
-      query = query.or(`nome.ilike.%${termoBusca.trim()}%,telefone.ilike.%${termoBusca.trim()}%`).range(0, 999)
+      query = query
+        .or(`nome.ilike.%${termoBusca.trim()}%,telefone.ilike.%${termoBusca.trim()}%`)
+        .range(0, 999)
     } else {
       query = query.range(0, LIMITE_PADRAO - 1)
     }
@@ -52,24 +63,54 @@ export default function Clientes() {
     timeoutRef.current = setTimeout(() => carregar(texto), 300)
   }
 
+  function cancelarFormulario() {
+    setForm(CAMPOS_VAZIOS)
+    setEditandoId(null)
+    setMostrarForm(false)
+  }
+
   async function salvar(e) {
     e.preventDefault()
     if (!form.nome.trim()) return
-    const { error } = await supabase.from('clientes').insert({
+
+    const payload = {
       nome: form.nome.trim(),
       documento: form.documento || null,
       telefone: form.telefone || null,
       email: form.email || null,
+      endereco: form.endereco || null,
+      bairro: form.bairro || null,
+      cidade: form.cidade || null,
       observacoes: form.observacoes || null,
-    })
+    }
+
+    const { error } = editandoId
+      ? await supabase.from('clientes').update(payload).eq('id', editandoId)
+      : await supabase.from('clientes').insert(payload)
+
     if (error) {
       setErro(error.message)
       return
     }
-    setForm(CAMPOS_VAZIOS)
-    setMostrarForm(false)
+    cancelarFormulario()
     carregar(busca)
     carregarContagemTotal()
+  }
+
+  function iniciarEdicao(cliente) {
+    setForm({
+      nome: cliente.nome || '',
+      documento: cliente.documento || '',
+      telefone: cliente.telefone || '',
+      email: cliente.email || '',
+      endereco: cliente.endereco || '',
+      bairro: cliente.bairro || '',
+      cidade: cliente.cidade || '',
+      observacoes: cliente.observacoes || '',
+    })
+    setEditandoId(cliente.id)
+    setMostrarForm(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   async function inativar(id) {
@@ -95,7 +136,13 @@ export default function Clientes() {
             <Upload size={16} /> Importar planilha
           </Link>
           <button
-            onClick={() => setMostrarForm((v) => !v)}
+            onClick={() => {
+              if (mostrarForm) cancelarFormulario()
+              else {
+                setForm(CAMPOS_VAZIOS)
+                setMostrarForm(true)
+              }
+            }}
             className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700"
           >
             <Plus size={16} /> Novo cliente
@@ -111,6 +158,7 @@ export default function Clientes() {
 
       {mostrarForm && (
         <form onSubmit={salvar} className="bg-white border border-gray-200 rounded-lg p-4 mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {editandoId && <p className="col-span-1 sm:col-span-2 text-sm font-medium text-primary-700 -mb-1">Editando cliente</p>}
           <input
             placeholder="Nome *"
             value={form.nome}
@@ -136,6 +184,24 @@ export default function Clientes() {
             onChange={(e) => setForm({ ...form, email: e.target.value })}
             className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
+          <input
+            placeholder="Endereço (rua, número)"
+            value={form.endereco}
+            onChange={(e) => setForm({ ...form, endereco: e.target.value })}
+            className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          />
+          <input
+            placeholder="Bairro"
+            value={form.bairro}
+            onChange={(e) => setForm({ ...form, bairro: e.target.value })}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          />
+          <input
+            placeholder="Cidade"
+            value={form.cidade}
+            onChange={(e) => setForm({ ...form, cidade: e.target.value })}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          />
           <textarea
             placeholder="Observações"
             value={form.observacoes}
@@ -144,11 +210,11 @@ export default function Clientes() {
             rows={2}
           />
           <div className="col-span-1 sm:col-span-2 flex justify-end gap-2">
-            <button type="button" onClick={() => setMostrarForm(false)} className="px-4 py-2 text-sm text-gray-500">
+            <button type="button" onClick={cancelarFormulario} className="px-4 py-2 text-sm text-gray-500">
               Cancelar
             </button>
             <button type="submit" className="rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700">
-              Salvar
+              {editandoId ? 'Salvar alterações' : 'Salvar'}
             </button>
           </div>
         </form>
@@ -186,17 +252,27 @@ export default function Clientes() {
         <p className="text-gray-400 text-sm">{buscando ? 'Buscando...' : 'Carregando...'}</p>
       ) : (
         <ul className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100">
-          {lista.map((f) => (
-            <li key={f.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3">
+          {lista.map((c) => (
+            <li key={c.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3">
               <div>
-                <p className="text-sm font-medium text-gray-800">{f.nome}</p>
+                <p className="text-sm font-medium text-gray-800">{c.nome}</p>
                 <p className="text-xs text-gray-500">
-                  {[f.documento, f.telefone, f.email].filter(Boolean).join(' · ')}
+                  {[c.documento, c.telefone, c.email].filter(Boolean).join(' · ')}
                 </p>
+                {(c.endereco || c.bairro || c.cidade) && (
+                  <p className="text-xs text-gray-400">
+                    {[c.endereco, c.bairro, c.cidade].filter(Boolean).join(', ')}
+                  </p>
+                )}
               </div>
-              <button onClick={() => inativar(f.id)} className="text-gray-400 hover:text-red-600 p-1 rounded">
-                <Trash2 size={16} />
-              </button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => iniciarEdicao(c)} className="text-gray-400 hover:text-primary-600 p-1.5 rounded">
+                  <Pencil size={15} />
+                </button>
+                <button onClick={() => inativar(c.id)} className="text-gray-400 hover:text-red-600 p-1.5 rounded">
+                  <Trash2 size={15} />
+                </button>
+              </div>
             </li>
           ))}
           {lista.length === 0 && (
