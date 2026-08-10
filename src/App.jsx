@@ -17,6 +17,8 @@ import ExtratoConta from './pages/ExtratoConta'
 import FluxoCaixa from './pages/FluxoCaixa'
 import OrdensServico from './pages/OrdensServico'
 import Estoque from './pages/Estoque'
+import ImprimirOS from './pages/ImprimirOS'
+import Recibo from './pages/Recibo'
 function RotaProtegida({ children }) {
   const { session, loading } = useAuth()
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">Carregando...</div>
@@ -39,6 +41,8 @@ function Rotas() {
         <Route index element={<Dashboard />} />
         <Route path="ordens-servico" element={<OrdensServico />} />
         <Route path="estoque" element={<Estoque />} />
+        <Route path="ordens-servico/:id/imprimir" element={<ImprimirOS />} />
+        <Route path="recibo/:id" element={<Recibo />} />
         <Route path="contas-a-pagar" element={<Lancamentos tipo="pagar" />} />
         <Route path="contas-a-receber" element={<Lancamentos tipo="receber" />} />
         <Route path="conciliacao" element={<Conciliacao />} />

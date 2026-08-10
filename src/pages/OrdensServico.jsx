@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO } from '../lib/format'
 import BuscaPessoa from '../components/BuscaPessoa'
@@ -13,6 +14,8 @@ import {
   Pencil,
   ClipboardList,
   Package,
+  Printer,
+  Receipt,
 } from 'lucide-react'
 
 const STATUS_ATUAL_OPCOES = [
@@ -233,6 +236,24 @@ export default function OrdensServico() {
           .update({ quantidade_estoque: Number(pecaAtual.quantidade_estoque) + Number(item.quantidade) })
           .eq('id', item.peca_id)
       }
+    }
+    carregar()
+  }
+
+  async function salvarMaoDeObra(os, valor) {
+    const { error } = await supabase.from('ordens_servico').update({ valor_mao_de_obra: valor }).eq('id', os.id)
+    if (error) {
+      setErro(error.message)
+      return
+    }
+    carregar()
+  }
+
+  async function salvarServicosRealizados(os, texto) {
+    const { error } = await supabase.from('ordens_servico').update({ servicos_realizados: texto || null }).eq('id', os.id)
+    if (error) {
+      setErro(error.message)
+      return
     }
     carregar()
   }
@@ -489,6 +510,11 @@ export default function OrdensServico() {
                       {os.equipamentos?.nome ? ` · ${os.equipamentos.nome}` : ''}
                     </p>
                     <p className="text-sm text-gray-600 mt-0.5">{os.descricao_problema}</p>
+                    {os.status === 'finalizada' && os.servicos_realizados && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        <span className="font-medium text-gray-600">Serviços realizados:</span> {os.servicos_realizados}
+                      </p>
+                    )}
                     <p className="text-xs text-gray-400 mt-1">
                       Aberta em {formatDateBR(os.data_abertura)}
                       {os.endereco ? ` · ${os.endereco}` : ''}
@@ -603,6 +629,37 @@ export default function OrdensServico() {
                 )}
 
                 {os.status === 'em_andamento' && (
+                  <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] text-gray-400 mb-0.5">Valor da mão de obra</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="R$ 0,00"
+                        defaultValue={os.valor_mao_de_obra ?? ''}
+                        onBlur={(e) => {
+                          const novo = e.target.value === '' ? null : Number(e.target.value)
+                          if (novo !== (os.valor_mao_de_obra ?? null)) salvarMaoDeObra(os, novo)
+                        }}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-gray-400 mb-0.5">Serviços realizados</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: troca do compressor, limpeza..."
+                        defaultValue={os.servicos_realizados ?? ''}
+                        onBlur={(e) => {
+                          if (e.target.value !== (os.servicos_realizados || '')) salvarServicosRealizados(os, e.target.value)
+                        }}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {os.status === 'em_andamento' && (
                   <div className="mb-3">
                     <BuscaPeca onSelecionar={(peca) => adicionarPeca(os, peca)} placeholder="Adicionar peça usada..." />
                   </div>
@@ -687,6 +744,20 @@ export default function OrdensServico() {
                   >
                     <Pencil size={13} /> Editar
                   </button>
+                  <Link
+                    to={`/ordens-servico/${os.id}/imprimir`}
+                    className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-500 px-3 py-1.5 text-xs hover:bg-gray-200"
+                  >
+                    <Printer size={13} /> Imprimir OS
+                  </Link>
+                  {os.status === 'finalizada' && os.lancamento_id && (
+                    <Link
+                      to={`/recibo/${os.lancamento_id}`}
+                      className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-500 px-3 py-1.5 text-xs hover:bg-gray-200"
+                    >
+                      <Receipt size={13} /> Recibo
+                    </Link>
+                  )}
                   <button
                     onClick={() => excluir(os.id)}
                     className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-500 px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-600 ml-auto"
