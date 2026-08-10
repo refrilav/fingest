@@ -249,7 +249,7 @@ export default function Lancamentos({ tipo }) {
     setPagamentoForm({
       forma: item.forma_pagamento || 'Pix',
       parcelas: '1',
-      desconto: item.desconto ? String(item.desconto) : '',
+      desconto: '',
       taxaPercentual: '',
     })
   }
@@ -908,6 +908,11 @@ export default function Lancamentos({ tipo }) {
                         <span className="text-green-600"> (taxa de {formatCurrencyBRL(calcularValorPago(item).taxaValor)} já descontada)</span>
                       )}
                     </p>
+                    {calcularValorPago(item).valorPago <= 0 && (
+                      <p className="text-xs text-red-600 font-medium mb-2">
+                        ⚠️ O valor líquido está zerado ou negativo — confere se o desconto/taxa não está maior que o valor do lançamento.
+                      </p>
+                    )}
 
                     <div className="flex justify-end gap-2">
                       <button onClick={() => setPagandoId(null)} className="px-3 py-1.5 text-sm text-gray-500">
