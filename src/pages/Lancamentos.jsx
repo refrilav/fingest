@@ -44,6 +44,7 @@ export default function Lancamentos({ tipo }) {
   const [filtroCategoria, setFiltroCategoria] = useState('todas')
   const [pagandoId, setPagandoId] = useState(null)
   const [contaEscolhida, setContaEscolhida] = useState('')
+  const [pagamentoForm, setPagamentoForm] = useState({ forma: 'Pix', parcelas: '1', desconto: '', taxaPercentual: '' })
   const [editandoId, setEditandoId] = useState(null)
 
   const tabelaPessoa = tipo === 'pagar' ? 'fornecedores' : 'clientes'
@@ -240,9 +241,26 @@ export default function Lancamentos({ tipo }) {
     setMostrarForm(false)
   }
 
+  const FORMAS_PAGAMENTO_BAIXA = ['Pix', 'Dinheiro', 'Cartão de Débito', 'Cartão de Crédito', 'Boleto', 'Transferência', 'Outro']
+
   function abrirPagamento(item) {
     setPagandoId(item.id)
     setContaEscolhida(contasBancarias.length > 0 ? contasBancarias[0].id : '')
+    setPagamentoForm({
+      forma: item.forma_pagamento || 'Pix',
+      parcelas: '1',
+      desconto: item.desconto ? String(item.desconto) : '',
+      taxaPercentual: '',
+    })
+  }
+
+  function calcularValorPago(item) {
+    const valorBase = Number(item.valor)
+    const desconto = Number(pagamentoForm.desconto) || 0
+    const juros = Number(item.juros) || 0
+    const ehCartao = pagamentoForm.forma === 'Cartão de Crédito' || pagamentoForm.forma === 'Cartão de Débito'
+    const taxaValor = ehCartao ? valorBase * ((Number(pagamentoForm.taxaPercentual) || 0) / 100) : 0
+    return { valorPago: valorBase - desconto - taxaValor + juros, taxaValor, desconto, ehCartao }
   }
 
   async function confirmarPagamento(item) {
@@ -250,15 +268,20 @@ export default function Lancamentos({ tipo }) {
       setErro('Selecione de qual conta saiu/entrou o valor.')
       return
     }
-    const desconto = Number(item.desconto) || 0
-    const juros = Number(item.juros) || 0
+    const { valorPago, taxaValor, desconto, ehCartao } = calcularValorPago(item)
+
     const { error } = await supabase
       .from('lancamentos')
       .update({
         status: 'pago',
-        valor_pago: Number(item.valor) - desconto + juros,
+        valor_pago: valorPago,
         data_pagamento: todayISO(),
         conta_bancaria_id: contaEscolhida,
+        forma_pagamento: pagamentoForm.forma,
+        desconto,
+        parcelas_cartao: pagamentoForm.forma === 'Cartão de Crédito' ? Number(pagamentoForm.parcelas) || 1 : null,
+        taxa_cartao_percentual: ehCartao ? Number(pagamentoForm.taxaPercentual) || 0 : null,
+        taxa_cartao_valor: ehCartao ? taxaValor : null,
       })
       .eq('id', item.id)
     if (error) {
@@ -807,32 +830,96 @@ export default function Lancamentos({ tipo }) {
                 </div>
 
                 {pagandoId === item.id && (
-                  <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
-                    <span className="text-sm text-green-800 shrink-0">
-                      {tipo === 'pagar' ? 'Saiu de:' : 'Entrou em:'}
-                    </span>
-                    <select
-                      value={contaEscolhida}
-                      onChange={(e) => setContaEscolhida(e.target.value)}
-                      className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                    >
-                      <option value="">Selecione a conta/caixa...</option>
-                      {contasBancarias.map((c) => (
-                        <option key={c.id} value={c.id}>{c.nome}</option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={() => setPagandoId(null)}
-                      className="px-3 py-1.5 text-sm text-gray-500"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      onClick={() => confirmarPagamento(item)}
-                      className="flex items-center gap-1 rounded-lg bg-green-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-green-700"
-                    >
-                      <CheckCircle2 size={14} /> Confirmar
-                    </button>
+                  <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                      <div>
+                        <label className="block text-[11px] text-green-800 mb-0.5">
+                          {tipo === 'pagar' ? 'Saiu de' : 'Entrou em'}
+                        </label>
+                        <select
+                          value={contaEscolhida}
+                          onChange={(e) => setContaEscolhida(e.target.value)}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        >
+                          <option value="">Selecione a conta/caixa...</option>
+                          {contasBancarias.map((c) => (
+                            <option key={c.id} value={c.id}>{c.nome}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-green-800 mb-0.5">Forma de pagamento</label>
+                        <select
+                          value={pagamentoForm.forma}
+                          onChange={(e) => setPagamentoForm({ ...pagamentoForm, forma: e.target.value })}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        >
+                          {FORMAS_PAGAMENTO_BAIXA.map((f) => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {pagamentoForm.forma === 'Cartão de Crédito' && (
+                        <div>
+                          <label className="block text-[11px] text-green-800 mb-0.5">Em quantas vezes</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="24"
+                            value={pagamentoForm.parcelas}
+                            onChange={(e) => setPagamentoForm({ ...pagamentoForm, parcelas: e.target.value })}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                          />
+                        </div>
+                      )}
+
+                      {(pagamentoForm.forma === 'Cartão de Crédito' || pagamentoForm.forma === 'Cartão de Débito') && (
+                        <div>
+                          <label className="block text-[11px] text-green-800 mb-0.5">Taxa da maquininha (%)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="Ex: 3,5"
+                            value={pagamentoForm.taxaPercentual}
+                            onChange={(e) => setPagamentoForm({ ...pagamentoForm, taxaPercentual: e.target.value })}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                          />
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-[11px] text-green-800 mb-0.5">Desconto dado (opcional)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="R$ 0,00"
+                          value={pagamentoForm.desconto}
+                          onChange={(e) => setPagamentoForm({ ...pagamentoForm, desconto: e.target.value })}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-green-800 mb-2">
+                      Valor líquido a {tipo === 'pagar' ? 'pagar' : 'receber'}:{' '}
+                      <strong>{formatCurrencyBRL(calcularValorPago(item).valorPago)}</strong>
+                      {calcularValorPago(item).taxaValor > 0 && (
+                        <span className="text-green-600"> (taxa de {formatCurrencyBRL(calcularValorPago(item).taxaValor)} já descontada)</span>
+                      )}
+                    </p>
+
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => setPagandoId(null)} className="px-3 py-1.5 text-sm text-gray-500">
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() => confirmarPagamento(item)}
+                        className="flex items-center gap-1 rounded-lg bg-green-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-green-700"
+                      >
+                        <CheckCircle2 size={14} /> Confirmar
+                      </button>
+                    </div>
                   </div>
                 )}
               </li>
