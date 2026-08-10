@@ -288,7 +288,8 @@ export default function OrdensServico() {
     }
 
     const hoje = todayISO()
-    const descricaoLancamento = `OS #${os.numero} — ${os.descricao_problema}`.substring(0, 250)
+    const nomeCliente = os.clientes?.nome || 'Cliente não identificado'
+    const descricaoLancamento = `OS #${os.numero} — ${nomeCliente}`.substring(0, 250)
     const detalheValores = `Peças: ${formatCurrencyBRL(totalPecas)} · Mão de obra: ${formatCurrencyBRL(maoDeObra)}`
 
     const { data: novoLancamento, error: erroLancamento } = await supabase
