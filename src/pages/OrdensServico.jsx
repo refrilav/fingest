@@ -447,17 +447,6 @@ export default function OrdensServico() {
             }}
           />
 
-          <select
-            value={form.centro_custo_id}
-            onChange={(e) => setForm({ ...form, centro_custo_id: e.target.value })}
-            className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-          >
-            <option value="">Centro de custo (opcional)...</option>
-            {centros.map((c) => (
-              <option key={c.id} value={c.id}>{c.nome}</option>
-            ))}
-          </select>
-
           <textarea
             placeholder="Observações"
             value={form.observacoes}
@@ -522,7 +511,7 @@ export default function OrdensServico() {
                       {os.clientes?.telefone ? ` · ${os.clientes.telefone}` : ''}
                       {os.equipamentos?.nome ? ` · ${os.equipamentos.nome}` : ''}
                     </p>
-                    <p className="text-sm text-gray-600 mt-0.5">{os.descricao_problema}</p>
+                    <p className="text-sm text-gray-600 mt-0.5 whitespace-pre-wrap">{os.descricao_problema}</p>
                     {os.status === 'finalizada' && os.servicos_realizados && (
                       <p className="text-xs text-gray-500 mt-1">
                         <span className="font-medium text-gray-600">Serviços realizados:</span> {os.servicos_realizados}

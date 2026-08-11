@@ -127,14 +127,16 @@ export default function ImprimirOS() {
         {mostrarProblema && (
           <div className="mb-6">
             <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Problema relatado</p>
-            <p className="text-sm text-gray-700 border border-gray-200 rounded-lg p-3 min-h-[3rem]">{os.descricao_problema}</p>
+            <p className="text-sm text-gray-700 border border-gray-200 rounded-lg p-3 min-h-[3rem] whitespace-pre-wrap">
+              {os.descricao_problema}
+            </p>
           </div>
         )}
 
         {mostrarServicos && (
           <div className="mb-6">
             <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Serviços realizados</p>
-            <p className="text-sm text-gray-700 border border-gray-200 rounded-lg p-3 min-h-[3rem]">
+            <p className="text-sm text-gray-700 border border-gray-200 rounded-lg p-3 min-h-[3rem] whitespace-pre-wrap">
               {os.servicos_realizados || '—'}
             </p>
           </div>
@@ -192,13 +194,9 @@ export default function ImprimirOS() {
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-8 mt-16 text-center text-sm text-gray-600">
-          <div>
-            <div className="border-t border-gray-400 pt-1">Assinatura do técnico</div>
-          </div>
-          <div>
-            <div className="border-t border-gray-400 pt-1">Assinatura do cliente</div>
-          </div>
+        <div className="border-t border-gray-200 pt-4 mt-8 text-center text-xs text-gray-500">
+          <p className="font-medium text-gray-700">Refrilav Assistência Técnica</p>
+          <p>[telefone] · [endereço] · [CNPJ]</p>
         </div>
       </div>
 

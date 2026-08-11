@@ -174,8 +174,9 @@ export default function Recibo() {
           </p>
         )}
 
-        <div className="text-center text-sm text-gray-600 mt-16">
-          <div className="border-t border-gray-400 pt-1 w-64 mx-auto">Assinatura</div>
+        <div className="border-t border-gray-200 pt-4 mt-8 text-center text-xs text-gray-500">
+          <p className="font-medium text-gray-700">Refrilav Assistência Técnica</p>
+          <p>[telefone] · [endereço] · [CNPJ]</p>
         </div>
       </div>
 
