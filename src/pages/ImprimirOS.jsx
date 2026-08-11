@@ -47,7 +47,10 @@ export default function ImprimirOS() {
     (acc, i) => acc + Number(i.quantidade) * Number(i.valor_unitario),
     0
   )
-  const totalGeral = totalPecas + Number(os.valor_mao_de_obra || 0)
+  // Quando a OS foi concluída no modo "Valor fechado", valor_mao_de_obra fica null —
+  // nesse caso não faz sentido mostrar Peças/Mão de obra discriminados, só o Total.
+  const modoFechado = os.valor_mao_de_obra === null && os.status === 'finalizada'
+  const totalGeral = modoFechado ? Number(os.valor_final || 0) : totalPecas + Number(os.valor_mao_de_obra || 0)
 
   return (
     <div className="max-w-2xl mx-auto py-6 px-4 print:p-0 print:max-w-full">
@@ -172,14 +175,18 @@ export default function ImprimirOS() {
 
         <div className="flex justify-end mb-6">
           <div className="w-64 text-sm space-y-1">
-            <div className="flex justify-between text-gray-600">
-              <span>Peças</span>
-              <span>{formatCurrencyBRL(totalPecas)}</span>
-            </div>
-            <div className="flex justify-between text-gray-600">
-              <span>Mão de obra</span>
-              <span>{formatCurrencyBRL(os.valor_mao_de_obra || 0)}</span>
-            </div>
+            {!modoFechado && (
+              <>
+                <div className="flex justify-between text-gray-600">
+                  <span>Peças</span>
+                  <span>{formatCurrencyBRL(totalPecas)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Mão de obra</span>
+                  <span>{formatCurrencyBRL(os.valor_mao_de_obra || 0)}</span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between font-bold text-gray-900 border-t border-gray-300 pt-1">
               <span>Total</span>
               <span>{formatCurrencyBRL(totalGeral)}</span>
