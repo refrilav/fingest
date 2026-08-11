@@ -14,6 +14,7 @@ export default function Recibo() {
   // Opções do que aparece no recibo
   const [mostrarServico, setMostrarServico] = useState(true)
   const [mostrarServicoRealizado, setMostrarServicoRealizado] = useState(true)
+  const [mostrarDetalhamento, setMostrarDetalhamento] = useState(true)
   const [mostrarEquipamento, setMostrarEquipamento] = useState(true)
   const [mostrarEndereco, setMostrarEndereco] = useState(true)
   const [mostrarTelefone, setMostrarTelefone] = useState(true)
@@ -30,7 +31,13 @@ export default function Recibo() {
           )
           .eq('id', id)
           .single(),
-        supabase.from('ordens_servico').select('numero, garantia_dias, servicos_realizados, data_conclusao').eq('lancamento_id', id).maybeSingle(),
+        supabase
+          .from('ordens_servico')
+          .select(
+            'numero, garantia_dias, servicos_realizados, data_conclusao, valor_mao_de_obra, ordens_servico_pecas(nome_peca, quantidade, valor_unitario)'
+          )
+          .eq('lancamento_id', id)
+          .maybeSingle(),
       ])
       if (lancRes.error) {
         setErro(lancRes.error.message)
@@ -51,6 +58,12 @@ export default function Recibo() {
 
   const pessoa = lancamento.tipo === 'receber' ? lancamento.clientes : lancamento.fornecedores
   const valorExibido = lancamento.status === 'pago' ? lancamento.valor_pago : lancamento.valor
+
+  // Só existe detalhamento de peças/mão de obra quando a OS foi concluída nesse modo
+  // (no modo "valor fechado", valor_mao_de_obra fica null)
+  const temDetalhamento = lancamento.os && lancamento.os.valor_mao_de_obra !== null
+  const pecasDaOS = lancamento.os?.ordens_servico_pecas || []
+  const totalPecasOS = pecasDaOS.reduce((acc, i) => acc + Number(i.quantidade) * Number(i.valor_unitario), 0)
 
   return (
     <div className="max-w-xl mx-auto py-6 px-4 print:p-0 print:max-w-full">
@@ -76,6 +89,16 @@ export default function Recibo() {
                   onChange={(e) => setMostrarServicoRealizado(e.target.checked)}
                 />
                 Serviço realizado (detalhado)
+              </label>
+            )}
+            {temDetalhamento && (
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={mostrarDetalhamento}
+                  onChange={(e) => setMostrarDetalhamento(e.target.checked)}
+                />
+                Detalhamento de peças/mão de obra
               </label>
             )}
             {lancamento.equipamentos?.nome && (
@@ -183,6 +206,52 @@ export default function Recibo() {
           <div className="mb-6">
             <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Serviço realizado</p>
             <p className="text-sm text-gray-700 whitespace-pre-wrap">{lancamento.os.servicos_realizados}</p>
+          </div>
+        )}
+
+        {mostrarDetalhamento && temDetalhamento && (
+          <div className="mb-6">
+            <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Detalhamento</p>
+            {pecasDaOS.length > 0 && (
+              <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden mb-2">
+                <thead>
+                  <tr className="bg-gray-50 text-left text-xs text-gray-500">
+                    <th className="px-3 py-1.5">Peça</th>
+                    <th className="px-3 py-1.5 text-right">Qtd.</th>
+                    <th className="px-3 py-1.5 text-right">Valor unit.</th>
+                    <th className="px-3 py-1.5 text-right">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pecasDaOS.map((item, i) => (
+                    <tr key={i} className="border-t border-gray-100">
+                      <td className="px-3 py-1.5 text-gray-700">{item.nome_peca}</td>
+                      <td className="px-3 py-1.5 text-right text-gray-600">{item.quantidade}</td>
+                      <td className="px-3 py-1.5 text-right text-gray-600">{formatCurrencyBRL(item.valor_unitario)}</td>
+                      <td className="px-3 py-1.5 text-right text-gray-700">
+                        {formatCurrencyBRL(Number(item.quantidade) * Number(item.valor_unitario))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <div className="flex justify-end">
+              <div className="w-56 text-sm space-y-1">
+                <div className="flex justify-between text-gray-600">
+                  <span>Peças</span>
+                  <span>{formatCurrencyBRL(totalPecasOS)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Mão de obra</span>
+                  <span>{formatCurrencyBRL(lancamento.os.valor_mao_de_obra || 0)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-gray-900 border-t border-gray-300 pt-1">
+                  <span>Total</span>
+                  <span>{formatCurrencyBRL(valorExibido)}</span>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
