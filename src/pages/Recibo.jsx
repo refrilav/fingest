@@ -30,7 +30,7 @@ export default function Recibo() {
           )
           .eq('id', id)
           .single(),
-        supabase.from('ordens_servico').select('numero, garantia_dias, servicos_realizados').eq('lancamento_id', id).maybeSingle(),
+        supabase.from('ordens_servico').select('numero, garantia_dias, servicos_realizados, data_conclusao').eq('lancamento_id', id).maybeSingle(),
       ])
       if (lancRes.error) {
         setErro(lancRes.error.message)
@@ -188,7 +188,13 @@ export default function Recibo() {
 
         {mostrarGarantia && garantiaDias && (
           <p className="text-sm text-gray-700 mb-10">
-            <strong>Garantia:</strong> {garantiaDias} dias a partir da data do pagamento.
+            <strong>Garantia:</strong> {garantiaDias} dias a partir da conclusão do serviço
+            {lancamento.os?.data_conclusao
+              ? ` (${formatDateBR(lancamento.os.data_conclusao)})`
+              : lancamento.data_pagamento
+              ? ` (${formatDateBR(lancamento.data_pagamento)})`
+              : ''}
+            .
           </p>
         )}
 
