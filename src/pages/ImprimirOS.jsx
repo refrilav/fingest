@@ -196,7 +196,7 @@ export default function ImprimirOS() {
 
         <div className="border-t border-gray-200 pt-4 mt-8 text-center text-xs text-gray-500">
           <p className="font-medium text-gray-700">Refrilav Assistência Técnica</p>
-          <p>[telefone] · [endereço] · [CNPJ]</p>
+          <p>(51) 99790-6220 · Av. Independência, 2335, Santa Cruz do Sul/RS · CNPJ 54.476.046/0001-00</p>
         </div>
       </div>
 
