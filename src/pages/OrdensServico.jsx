@@ -288,7 +288,7 @@ export default function OrdensServico() {
     if (valorFinal <= 0) {
       setErro(
         fechado
-          ? 'Informe o valor total combinado com o cliente.'
+          ? 'Informe o valor total.'
           : 'O valor total (peças + mão de obra) precisa ser maior que zero para concluir.'
       )
       return
@@ -695,7 +695,7 @@ export default function OrdensServico() {
                           concluirForm.modoValor === 'fechado' ? 'bg-green-600 text-white' : 'text-gray-500'
                         }`}
                       >
-                        Valor fechado (não sei discriminar)
+                        Valor fechado
                       </button>
                     </div>
 
@@ -713,7 +713,7 @@ export default function OrdensServico() {
                         <input
                           type="number"
                           step="0.01"
-                          placeholder="Valor total combinado com o cliente"
+                          placeholder="Valor total"
                           value={concluirForm.valorFechado}
                           onChange={(e) => setConcluirForm({ ...concluirForm, valorFechado: e.target.value })}
                           className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
@@ -746,7 +746,7 @@ export default function OrdensServico() {
                       </p>
                     ) : (
                       <p className="text-sm text-green-800 mb-2">
-                        Total combinado: <strong>{formatCurrencyBRL(Number(concluirForm.valorFechado) || 0)}</strong>
+                        Valor total: <strong>{formatCurrencyBRL(Number(concluirForm.valorFechado) || 0)}</strong>
                         {totalPecas > 0 && (
                           <span className="text-green-600 text-xs block">
                             (as peças usadas ficam registradas no estoque normalmente, sem afetar esse valor)
