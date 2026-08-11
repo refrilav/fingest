@@ -40,7 +40,7 @@ const CAMPOS_VAZIOS = {
   data_abertura: todayISO(),
 }
 
-const CONCLUIR_VAZIO = { categoria_id: '', valor_mao_de_obra: '', garantia_dias: '' }
+const CONCLUIR_VAZIO = { categoria_id: '', valor_mao_de_obra: '', garantia_dias: '', modoValor: 'detalhado', valorFechado: '' }
 
 export default function OrdensServico() {
   const [lista, setLista] = useState([])
@@ -270,6 +270,8 @@ export default function OrdensServico() {
       categoria_id: os.categoria_id || '',
       valor_mao_de_obra: os.valor_mao_de_obra != null ? String(os.valor_mao_de_obra) : '',
       garantia_dias: os.garantia_dias != null ? String(os.garantia_dias) : '',
+      modoValor: 'detalhado',
+      valorFechado: '',
     })
   }
 
@@ -279,18 +281,25 @@ export default function OrdensServico() {
 
   async function confirmarConclusao(os) {
     const totalPecas = totalPecasDaOS(os)
-    const maoDeObra = Number(concluirForm.valor_mao_de_obra) || 0
-    const valorFinal = totalPecas + maoDeObra
+    const fechado = concluirForm.modoValor === 'fechado'
+    const maoDeObra = fechado ? null : Number(concluirForm.valor_mao_de_obra) || 0
+    const valorFinal = fechado ? Number(concluirForm.valorFechado) || 0 : totalPecas + maoDeObra
 
     if (valorFinal <= 0) {
-      setErro('O valor total (peças + mão de obra) precisa ser maior que zero para concluir.')
+      setErro(
+        fechado
+          ? 'Informe o valor total combinado com o cliente.'
+          : 'O valor total (peças + mão de obra) precisa ser maior que zero para concluir.'
+      )
       return
     }
 
     const hoje = todayISO()
     const nomeCliente = os.clientes?.nome || 'Cliente não identificado'
     const descricaoLancamento = `OS #${os.numero} — ${nomeCliente}`.substring(0, 250)
-    const detalheValores = `Peças: ${formatCurrencyBRL(totalPecas)} · Mão de obra: ${formatCurrencyBRL(maoDeObra)}`
+    const detalheValores = fechado
+      ? `Valor fechado (peças + mão de obra não discriminados)${totalPecas > 0 ? ` · Peças usadas somam ${formatCurrencyBRL(totalPecas)} pelo preço de tabela, só como referência de estoque` : ''}`
+      : `Peças: ${formatCurrencyBRL(totalPecas)} · Mão de obra: ${formatCurrencyBRL(maoDeObra)}`
 
     const { data: novoLancamento, error: erroLancamento } = await supabase
       .from('lancamentos')
@@ -669,15 +678,47 @@ export default function OrdensServico() {
 
                 {concluindoId === os.id && (
                   <div className="mb-3 bg-green-50 border border-green-200 rounded-lg p-3">
+                    <div className="flex gap-2 bg-white rounded-lg p-1 mb-2 border border-gray-200">
+                      <button
+                        type="button"
+                        onClick={() => setConcluirForm({ ...concluirForm, modoValor: 'detalhado' })}
+                        className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${
+                          concluirForm.modoValor === 'detalhado' ? 'bg-green-600 text-white' : 'text-gray-500'
+                        }`}
+                      >
+                        Peças + mão de obra
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConcluirForm({ ...concluirForm, modoValor: 'fechado' })}
+                        className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${
+                          concluirForm.modoValor === 'fechado' ? 'bg-green-600 text-white' : 'text-gray-500'
+                        }`}
+                      >
+                        Valor fechado (não sei discriminar)
+                      </button>
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="Valor da mão de obra"
-                        value={concluirForm.valor_mao_de_obra}
-                        onChange={(e) => setConcluirForm({ ...concluirForm, valor_mao_de_obra: e.target.value })}
-                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                      />
+                      {concluirForm.modoValor === 'detalhado' ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="Valor da mão de obra"
+                          value={concluirForm.valor_mao_de_obra}
+                          onChange={(e) => setConcluirForm({ ...concluirForm, valor_mao_de_obra: e.target.value })}
+                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        />
+                      ) : (
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="Valor total combinado com o cliente"
+                          value={concluirForm.valorFechado}
+                          onChange={(e) => setConcluirForm({ ...concluirForm, valorFechado: e.target.value })}
+                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        />
+                      )}
                       <SelectCategoria
                         tipo="receita"
                         categorias={categorias}
@@ -696,11 +737,24 @@ export default function OrdensServico() {
                         className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
                       />
                     </div>
-                    <p className="text-sm text-green-800 mb-2">
-                      Peças: <strong>{formatCurrencyBRL(totalPecas)}</strong> + Mão de obra:{' '}
-                      <strong>{formatCurrencyBRL(Number(concluirForm.valor_mao_de_obra) || 0)}</strong> = Total:{' '}
-                      <strong>{formatCurrencyBRL(totalPecas + (Number(concluirForm.valor_mao_de_obra) || 0))}</strong>
-                    </p>
+
+                    {concluirForm.modoValor === 'detalhado' ? (
+                      <p className="text-sm text-green-800 mb-2">
+                        Peças: <strong>{formatCurrencyBRL(totalPecas)}</strong> + Mão de obra:{' '}
+                        <strong>{formatCurrencyBRL(Number(concluirForm.valor_mao_de_obra) || 0)}</strong> = Total:{' '}
+                        <strong>{formatCurrencyBRL(totalPecas + (Number(concluirForm.valor_mao_de_obra) || 0))}</strong>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-green-800 mb-2">
+                        Total combinado: <strong>{formatCurrencyBRL(Number(concluirForm.valorFechado) || 0)}</strong>
+                        {totalPecas > 0 && (
+                          <span className="text-green-600 text-xs block">
+                            (as peças usadas ficam registradas no estoque normalmente, sem afetar esse valor)
+                          </span>
+                        )}
+                      </p>
+                    )}
+
                     <div className="flex justify-end gap-2">
                       <button onClick={() => setConcluindoId(null)} className="px-3 py-1.5 text-sm text-gray-500">
                         Cancelar
