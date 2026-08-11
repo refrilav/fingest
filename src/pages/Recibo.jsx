@@ -13,6 +13,7 @@ export default function Recibo() {
 
   // Opções do que aparece no recibo
   const [mostrarServico, setMostrarServico] = useState(true)
+  const [mostrarServicoRealizado, setMostrarServicoRealizado] = useState(true)
   const [mostrarEquipamento, setMostrarEquipamento] = useState(true)
   const [mostrarEndereco, setMostrarEndereco] = useState(true)
   const [mostrarTelefone, setMostrarTelefone] = useState(true)
@@ -29,7 +30,7 @@ export default function Recibo() {
           )
           .eq('id', id)
           .single(),
-        supabase.from('ordens_servico').select('numero, garantia_dias').eq('lancamento_id', id).maybeSingle(),
+        supabase.from('ordens_servico').select('numero, garantia_dias, servicos_realizados').eq('lancamento_id', id).maybeSingle(),
       ])
       if (lancRes.error) {
         setErro(lancRes.error.message)
@@ -65,6 +66,16 @@ export default function Recibo() {
               <label className="flex items-center gap-1.5">
                 <input type="checkbox" checked={mostrarServico} onChange={(e) => setMostrarServico(e.target.checked)} />
                 Serviço
+              </label>
+            )}
+            {lancamento.os?.servicos_realizados && (
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={mostrarServicoRealizado}
+                  onChange={(e) => setMostrarServicoRealizado(e.target.checked)}
+                />
+                Serviço realizado (detalhado)
               </label>
             )}
             {lancamento.equipamentos?.nome && (
@@ -167,6 +178,13 @@ export default function Recibo() {
             </div>
           )}
         </div>
+
+        {mostrarServicoRealizado && lancamento.os?.servicos_realizados && (
+          <div className="mb-6">
+            <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Serviço realizado</p>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{lancamento.os.servicos_realizados}</p>
+          </div>
+        )}
 
         {mostrarGarantia && garantiaDias && (
           <p className="text-sm text-gray-700 mb-10">
