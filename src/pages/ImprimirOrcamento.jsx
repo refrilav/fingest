@@ -134,6 +134,16 @@ export default function ImprimirOrcamento() {
           </div>
         </div>
 
+        {proposta.mostrar_forma_pagamento && proposta.forma_pagamento && (
+          <p className="text-sm text-gray-700 mb-4">
+            <strong>Forma de pagamento:</strong> {proposta.forma_pagamento}
+          </p>
+        )}
+
+        {proposta.aviso_padrao && (
+          <p className="text-sm text-gray-600 mb-6 whitespace-pre-wrap">{proposta.aviso_padrao}</p>
+        )}
+
         {proposta.observacoes_complementares && (
           <div className="mb-6">
             <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Observações complementares</p>

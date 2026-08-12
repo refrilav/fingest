@@ -12,6 +12,13 @@ const TEXTOS_PADRAO = {
   manutencao: '',
 }
 
+const AVISOS_PADRAO = {
+  higienizacao:
+    'Caso seja identificado algum problema técnico durante o serviço (vazamento, peça danificada, etc.), o cliente será comunicado antes da execução de qualquer serviço adicional.',
+  instalacao: '',
+  manutencao: '',
+}
+
 const TIPO_LABEL = {
   higienizacao: 'Higienização',
   instalacao: 'Instalação',
@@ -24,7 +31,10 @@ const CAMPOS_VAZIOS = {
   data_emissao: todayISO(),
   validade_dias: '15',
   texto_explicativo: TEXTOS_PADRAO.higienizacao,
+  aviso_padrao: AVISOS_PADRAO.higienizacao,
   observacoes_complementares: '',
+  forma_pagamento: 'Pix, cartão de débito/crédito ou dinheiro',
+  mostrar_forma_pagamento: false,
 }
 
 const ITEM_VAZIO = { local: '', descricao: '', quantidade: '1', valor_unitario: '' }
@@ -70,13 +80,15 @@ export default function Orcamentos() {
   }
 
   function handleTipoChange(tipo) {
-    // só troca o texto padrão automaticamente se o texto atual ainda for o padrão anterior
+    // só troca os textos padrão automaticamente se o texto atual ainda for o padrão anterior
     // (evita apagar uma edição manual sem querer)
-    const eraPadrao = Object.values(TEXTOS_PADRAO).includes(form.texto_explicativo)
+    const eraTextoPadrao = Object.values(TEXTOS_PADRAO).includes(form.texto_explicativo)
+    const eraAvisoPadrao = Object.values(AVISOS_PADRAO).includes(form.aviso_padrao)
     setForm({
       ...form,
       tipo,
-      texto_explicativo: eraPadrao ? TEXTOS_PADRAO[tipo] : form.texto_explicativo,
+      texto_explicativo: eraTextoPadrao ? TEXTOS_PADRAO[tipo] : form.texto_explicativo,
+      aviso_padrao: eraAvisoPadrao ? AVISOS_PADRAO[tipo] : form.aviso_padrao,
     })
   }
 
@@ -114,7 +126,10 @@ export default function Orcamentos() {
       data_emissao: form.data_emissao,
       validade_dias: form.validade_dias ? Number(form.validade_dias) : null,
       texto_explicativo: form.texto_explicativo || null,
+      aviso_padrao: form.aviso_padrao || null,
       observacoes_complementares: form.observacoes_complementares || null,
+      forma_pagamento: form.forma_pagamento || null,
+      mostrar_forma_pagamento: form.mostrar_forma_pagamento,
     }
 
     let propostaId = editandoId
@@ -162,7 +177,10 @@ export default function Orcamentos() {
       data_emissao: proposta.data_emissao,
       validade_dias: proposta.validade_dias != null ? String(proposta.validade_dias) : '',
       texto_explicativo: proposta.texto_explicativo || '',
+      aviso_padrao: proposta.aviso_padrao || '',
       observacoes_complementares: proposta.observacoes_complementares || '',
+      forma_pagamento: proposta.forma_pagamento || '',
+      mostrar_forma_pagamento: proposta.mostrar_forma_pagamento || false,
     })
     setItens(
       (proposta.proposta_itens || [])
@@ -323,6 +341,36 @@ export default function Orcamentos() {
             rows={4}
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mb-3"
           />
+
+          <label className="block text-xs text-gray-500 mb-1">
+            Aviso sobre condições encontradas (editável, aparece se preenchido)
+          </label>
+          <textarea
+            value={form.aviso_padrao}
+            onChange={(e) => setForm({ ...form, aviso_padrao: e.target.value })}
+            rows={2}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mb-3"
+          />
+
+          <div className="mb-3">
+            <label className="flex items-center gap-1.5 text-xs text-gray-600 mb-1">
+              <input
+                type="checkbox"
+                checked={form.mostrar_forma_pagamento}
+                onChange={(e) => setForm({ ...form, mostrar_forma_pagamento: e.target.checked })}
+              />
+              Mostrar forma de pagamento neste orçamento
+            </label>
+            {form.mostrar_forma_pagamento && (
+              <input
+                type="text"
+                value={form.forma_pagamento}
+                onChange={(e) => setForm({ ...form, forma_pagamento: e.target.value })}
+                placeholder="Ex: Pix, cartão de débito/crédito ou dinheiro"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            )}
+          </div>
 
           <label className="block text-xs text-gray-500 mb-1">Observações complementares (opcional — só aparece se preenchido)</label>
           <textarea
