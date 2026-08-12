@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
+  Home as HomeIcon,
   LayoutDashboard,
   ClipboardList,
   FileText,
@@ -21,7 +22,8 @@ import {
 import { useAuth } from '../lib/AuthContext'
 
 const navItems = [
-  { to: '/', label: 'Ordens de Serviço', icon: ClipboardList, end: true },
+  { to: '/', label: 'Início', icon: HomeIcon, end: true },
+  { to: '/ordens-servico', label: 'Ordens de Serviço', icon: ClipboardList },
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/orcamentos', label: 'Orçamentos', icon: FileText },
   { to: '/estoque', label: 'Estoque', icon: Package },
