@@ -17,7 +17,8 @@ const AVISOS_PADRAO = {
   higienizacao:
     'Caso seja identificado algum problema técnico durante o serviço (vazamento, peça danificada, etc.), o cliente será comunicado antes da execução de qualquer serviço adicional.',
   instalacao: '',
-  manutencao: '',
+  manutencao:
+    'O valor deste orçamento é baseado no diagnóstico técnico realizado. Caso, durante a execução do serviço, sejam identificados problemas adicionais não previstos, o cliente será comunicado antes da realização de qualquer serviço ou custo extra.',
 }
 
 const GARANTIAS_PADRAO = {
