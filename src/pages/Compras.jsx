@@ -14,9 +14,10 @@ const CAMPOS_VAZIOS = {
   numero_nota: '',
   chave_acesso: '',
   categoria_id: '',
-  data_vencimento: todayISO(),
   observacoes: '',
 }
+
+const PARCELA_VAZIA = { dataVencimento: todayISO(), valor: '' }
 
 // item: { descricao, quantidade, valorUnitario, pecaId (se casado com peça existente), valorVenda, criarNova }
 const ITEM_VAZIO = { descricao: '', quantidade: '1', valorUnitario: '', pecaId: '', pecaNome: '', valorVenda: '', criarNova: false }
@@ -29,6 +30,7 @@ export default function Compras() {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [form, setForm] = useState(CAMPOS_VAZIOS)
   const [itens, setItens] = useState([])
+  const [parcelas, setParcelas] = useState([{ ...PARCELA_VAZIA }])
   const [entraEstoque, setEntraEstoque] = useState(null) // null = ainda não decidiu, true/false depois
   const [salvando, setSalvando] = useState(false)
   const [lendoXml, setLendoXml] = useState(false)
@@ -56,6 +58,7 @@ export default function Compras() {
   function cancelarFormulario() {
     setForm(CAMPOS_VAZIOS)
     setItens([])
+    setParcelas([{ ...PARCELA_VAZIA }])
     setEntraEstoque(null)
     setMostrarForm(false)
     setErro(null)
@@ -64,6 +67,7 @@ export default function Compras() {
   function abrirFormulario() {
     setForm(CAMPOS_VAZIOS)
     setItens([{ ...ITEM_VAZIO }])
+    setParcelas([{ ...PARCELA_VAZIA }])
     setEntraEstoque(null)
     setMostrarForm(true)
   }
@@ -107,6 +111,18 @@ export default function Compras() {
         }))
       )
 
+      if (dados.duplicatas && dados.duplicatas.length > 0) {
+        setParcelas(
+          dados.duplicatas.map((d) => ({
+            dataVencimento: d.dataVencimento || todayISO(),
+            valor: String(d.valor),
+          }))
+        )
+      } else {
+        // nota sem seção de duplicatas — assume pagamento à vista, vencimento na data de emissão
+        setParcelas([{ dataVencimento: dados.dataEmissao || todayISO(), valor: String(dados.valorTotal) }])
+      }
+
       if (!fornecedorId && dados.fornecedor.nome) {
         setErro(
           `Não achei "${dados.fornecedor.nome}" nos seus fornecedores. Busque/cadastre ele no campo abaixo (CNPJ: ${dados.fornecedor.documento || '—'}).`
@@ -145,7 +161,23 @@ export default function Compras() {
     setItens(novos)
   }
 
+  function atualizarParcela(index, campo, valor) {
+    const novas = [...parcelas]
+    novas[index] = { ...novas[index], [campo]: valor }
+    setParcelas(novas)
+  }
+
+  function adicionarParcela() {
+    setParcelas([...parcelas, { ...PARCELA_VAZIA }])
+  }
+
+  function removerParcela(index) {
+    if (parcelas.length === 1) return
+    setParcelas(parcelas.filter((_, i) => i !== index))
+  }
+
   const totalCompra = itens.reduce((acc, i) => acc + (Number(i.quantidade) || 0) * (Number(i.valorUnitario) || 0), 0)
+  const totalParcelas = parcelas.reduce((acc, p) => acc + (Number(p.valor) || 0), 0)
 
   async function salvar(e) {
     e.preventDefault()
@@ -159,6 +191,10 @@ export default function Compras() {
     }
     if (entraEstoque === null) {
       setErro('Diga se essa compra entra no estoque ou não.')
+      return
+    }
+    if (parcelas.some((p) => !p.dataVencimento || !p.valor || Number(p.valor) <= 0)) {
+      setErro('Preencha data e valor de todas as parcelas.')
       return
     }
     if (entraEstoque) {
@@ -245,21 +281,28 @@ export default function Compras() {
       return
     }
 
-    // Gera a conta a pagar
-    const { data: novoLancamento, error: erroLancamento } = await supabase
+    // Gera a(s) conta(s) a pagar — uma por parcela, se houver mais de uma
+    const grupoId = parcelas.length > 1 ? crypto.randomUUID() : null
+    const linhasLancamento = parcelas.map((p, i) => ({
+      tipo: 'pagar',
+      descricao: `Compra #${novaCompra.numero}${form.numero_nota ? ` — NF ${form.numero_nota}` : ''}${
+        parcelas.length > 1 ? ` (${i + 1}/${parcelas.length})` : ''
+      }`,
+      valor: Number(p.valor),
+      data_vencimento: p.dataVencimento,
+      data_competencia: form.data_compra,
+      categoria_id: form.categoria_id || null,
+      fornecedor_id: form.fornecedor_id,
+      observacoes: `Gerado automaticamente pela compra #${novaCompra.numero}.`,
+      grupo_id: grupoId,
+      numero_parcela: parcelas.length > 1 ? i + 1 : null,
+      total_parcelas: parcelas.length > 1 ? parcelas.length : null,
+    }))
+
+    const { data: novosLancamentos, error: erroLancamento } = await supabase
       .from('lancamentos')
-      .insert({
-        tipo: 'pagar',
-        descricao: `Compra #${novaCompra.numero}${form.numero_nota ? ` — NF ${form.numero_nota}` : ''}`,
-        valor: totalCompra,
-        data_vencimento: form.data_vencimento,
-        data_competencia: form.data_compra,
-        categoria_id: form.categoria_id || null,
-        fornecedor_id: form.fornecedor_id,
-        observacoes: `Gerado automaticamente pela compra #${novaCompra.numero}.`,
-      })
+      .insert(linhasLancamento)
       .select()
-      .single()
 
     if (erroLancamento) {
       setErro(erroLancamento.message)
@@ -267,7 +310,7 @@ export default function Compras() {
       return
     }
 
-    await supabase.from('compras').update({ lancamento_id: novoLancamento.id }).eq('id', novaCompra.id)
+    await supabase.from('compras').update({ lancamento_id: novosLancamentos[0].id }).eq('id', novaCompra.id)
 
     setSalvando(false)
     cancelarFormulario()
@@ -437,16 +480,52 @@ export default function Compras() {
                 setForm((f) => ({ ...f, categoria_id: nova.id }))
               }}
             />
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Vencimento da conta a pagar</label>
-              <input
-                type="date"
-                value={form.data_vencimento}
-                onChange={(e) => setForm({ ...form, data_vencimento: e.target.value })}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
-            </div>
           </div>
+
+          <p className="text-sm font-medium text-gray-700 mb-2">
+            Parcelas da conta a pagar {parcelas.length > 1 ? `(${parcelas.length}x)` : ''}
+          </p>
+          <div className="space-y-2 mb-2">
+            {parcelas.map((p, i) => (
+              <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-gray-50 rounded-lg p-2">
+                <span className="sm:col-span-1 text-xs text-gray-400 font-mono">{i + 1}ª</span>
+                <input
+                  type="date"
+                  value={p.dataVencimento}
+                  onChange={(e) => atualizarParcela(i, 'dataVencimento', e.target.value)}
+                  className="sm:col-span-6 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="Valor"
+                  value={p.valor}
+                  onChange={(e) => atualizarParcela(i, 'valor', e.target.value)}
+                  className="sm:col-span-4 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-right"
+                />
+                <button
+                  type="button"
+                  onClick={() => removerParcela(i)}
+                  disabled={parcelas.length === 1}
+                  className="sm:col-span-1 text-gray-400 hover:text-red-600 justify-self-end disabled:opacity-30"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={adicionarParcela}
+            className="flex items-center gap-1 text-sm text-primary-700 hover:bg-primary-50 rounded-lg px-3 py-1.5 mb-2"
+          >
+            <Plus size={14} /> Adicionar parcela
+          </button>
+          <p className={`text-xs mb-3 ${Math.abs(totalParcelas - totalCompra) > 0.01 ? 'text-amber-600' : 'text-gray-400'}`}>
+            Total das parcelas: {formatCurrencyBRL(totalParcelas)}
+            {Math.abs(totalParcelas - totalCompra) > 0.01 &&
+              ` (diferente do total dos itens: ${formatCurrencyBRL(totalCompra)})`}
+          </p>
 
           <textarea
             placeholder="Observações (opcional)"

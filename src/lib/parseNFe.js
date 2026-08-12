@@ -67,5 +67,12 @@ export function parseNFeXML(xmlString) {
     throw new Error('Não encontrei nenhum item (produto) nessa nota.')
   }
 
-  return { fornecedor, numeroNota, dataEmissao, chaveAcesso, valorTotal, itens }
+  // Duplicatas (parcelas do pagamento) — ficam em <cobr><dup>
+  const duplicatas = Array.from(infNFe.querySelectorAll('cobr dup')).map((dup) => ({
+    numero: texto(dup, 'nDup'),
+    dataVencimento: texto(dup, 'dVenc'),
+    valor: Number(texto(dup, 'vDup')) || 0,
+  }))
+
+  return { fornecedor, numeroNota, dataEmissao, chaveAcesso, valorTotal, itens, duplicatas }
 }
