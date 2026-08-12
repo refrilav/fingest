@@ -254,8 +254,8 @@ export default function Clientes() {
         <ul className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100">
           {lista.map((c) => (
             <li key={c.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3">
-              <div>
-                <p className="text-sm font-medium text-gray-800">{c.nome}</p>
+              <Link to={`/clientes/${c.id}`} className="flex-1 hover:bg-gray-50 -mx-2 px-2 py-1 rounded-lg transition-colors">
+                <p className="text-sm font-medium text-gray-800 hover:text-primary-700">{c.nome}</p>
                 <p className="text-xs text-gray-500">
                   {[c.documento, c.telefone, c.email].filter(Boolean).join(' · ')}
                 </p>
@@ -264,7 +264,7 @@ export default function Clientes() {
                     {[c.endereco, c.bairro, c.cidade].filter(Boolean).join(', ')}
                   </p>
                 )}
-              </div>
+              </Link>
               <div className="flex items-center gap-1">
                 <button onClick={() => iniciarEdicao(c)} className="text-gray-400 hover:text-primary-600 p-1.5 rounded">
                   <Pencil size={15} />
