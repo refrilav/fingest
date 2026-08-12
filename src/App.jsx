@@ -24,6 +24,7 @@ import ClienteDetalhe from './pages/ClienteDetalhe'
 import Home from './pages/Home'
 import Financeiro from './pages/Financeiro'
 import Cadastros from './pages/Cadastros'
+import ImprimirCobranca from './pages/ImprimirCobranca'
 function RotaProtegida({ children }) {
   const { session, loading } = useAuth()
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">Carregando...</div>
@@ -56,6 +57,14 @@ function Rotas() {
         element={
           <RotaProtegida>
             <ImprimirOrcamento />
+          </RotaProtegida>
+        }
+      />
+      <Route
+        path="/cobranca/:id/imprimir"
+        element={
+          <RotaProtegida>
+            <ImprimirCobranca />
           </RotaProtegida>
         }
       />

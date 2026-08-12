@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO } from '../lib/format'
-import { ArrowLeft, ClipboardList, Receipt, FileText, Phone, MapPin, DollarSign } from 'lucide-react'
+import { ArrowLeft, ClipboardList, Receipt, FileText, Phone, MapPin, DollarSign, Printer } from 'lucide-react'
 
 export default function ClienteDetalhe() {
   const { id } = useParams()
@@ -22,7 +22,7 @@ export default function ClienteDetalhe() {
       supabase.from('clientes').select('*').eq('id', id).single(),
       supabase
         .from('ordens_servico')
-        .select('id, numero, status, descricao_problema, data_abertura, valor_final, cliente_final, equipamentos(nome)')
+        .select('id, numero, status, descricao_problema, data_abertura, valor_final, cliente_final, lancamento_id, equipamentos(nome)')
         .eq('cliente_id', id)
         .order('numero', { ascending: false })
         .range(0, 9999),
@@ -77,6 +77,7 @@ export default function ClienteDetalhe() {
   const totalSelecionado = pendentes
     .filter((o) => selecionadas.has(o.id))
     .reduce((acc, o) => acc + Number(o.valor_final || 0), 0)
+  const lancamentosComOS = new Set(ordens.filter((o) => o.lancamento_id).map((o) => o.lancamento_id))
 
   function alternarSelecao(osId) {
     const novas = new Set(selecionadas)
@@ -267,6 +268,15 @@ export default function ClienteDetalhe() {
                   {formatCurrencyBRL(l.status === 'pago' ? l.valor_pago : l.valor)}
                 </span>
                 <StatusBadgeLancamento status={l.status} />
+                {lancamentosComOS.has(l.id) && (
+                  <Link
+                    to={`/cobranca/${l.id}/imprimir`}
+                    title="Ver relatório das OS's incluídas"
+                    className="text-gray-400 hover:text-primary-600 p-1 rounded"
+                  >
+                    <Printer size={15} />
+                  </Link>
+                )}
               </div>
             </li>
           ))}
