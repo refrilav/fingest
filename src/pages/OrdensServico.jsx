@@ -39,6 +39,7 @@ const CAMPOS_VAZIOS = {
   observacoes: '',
   data_abertura: todayISO(),
   cliente_final: '',
+  data_conclusao_edicao: '',
 }
 
 const CONCLUIR_VAZIO = {
@@ -131,6 +132,12 @@ export default function OrdensServico() {
       cliente_final: form.cliente_final || null,
     }
 
+    // Se a OS já está finalizada, permite corrigir a data de conclusão também
+    const itemOriginal = editandoId ? lista.find((o) => o.id === editandoId) : null
+    if (itemOriginal?.status === 'finalizada' && form.data_conclusao_edicao) {
+      payload.data_conclusao = form.data_conclusao_edicao
+    }
+
     const { error } = editandoId
       ? await supabase.from('ordens_servico').update(payload).eq('id', editandoId)
       : await supabase.from('ordens_servico').insert(payload)
@@ -155,6 +162,7 @@ export default function OrdensServico() {
       observacoes: os.observacoes || '',
       data_abertura: os.data_abertura,
       cliente_final: os.cliente_final || '',
+      data_conclusao_edicao: os.data_conclusao || '',
     })
     setEditandoId(os.id)
     setMostrarForm(true)
@@ -413,6 +421,9 @@ export default function OrdensServico() {
     return os.status === filtroStatus
   })
 
+  const itemEditando = editandoId ? lista.find((o) => o.id === editandoId) : null
+  const editandoOSFinalizada = itemEditando?.status === 'finalizada'
+
   return (
     <div className="max-w-4xl">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 gap-2">
@@ -463,6 +474,18 @@ export default function OrdensServico() {
             onChange={(e) => setForm({ ...form, cliente_final: e.target.value })}
             className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
+
+          {editandoOSFinalizada && (
+            <div className="col-span-1 sm:col-span-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <label className="block text-xs text-amber-800 mb-1">Data de conclusão do serviço</label>
+              <input
+                type="date"
+                value={form.data_conclusao_edicao}
+                onChange={(e) => setForm({ ...form, data_conclusao_edicao: e.target.value })}
+                className="w-full sm:w-48 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+              />
+            </div>
+          )}
 
           <textarea
             placeholder="Descrição do problema / serviço solicitado (opcional)"
