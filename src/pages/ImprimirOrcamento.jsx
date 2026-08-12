@@ -10,6 +10,12 @@ const TIPO_LABEL = {
   manutencao: 'Manutenção Corretiva',
 }
 
+const COLUNA_ITEM_LABEL = {
+  higienizacao: 'Local',
+  instalacao: 'Item',
+  manutencao: 'Item',
+}
+
 export default function ImprimirOrcamento() {
   const { id } = useParams()
   const [proposta, setProposta] = useState(null)
@@ -102,7 +108,7 @@ export default function ImprimirOrcamento() {
           <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
             <thead>
               <tr className="bg-gray-50 text-left text-xs text-gray-500">
-                <th className="px-3 py-1.5">Local</th>
+                <th className="px-3 py-1.5">{COLUNA_ITEM_LABEL[proposta.tipo] || 'Local'}</th>
                 <th className="px-3 py-1.5">Detalhe</th>
                 <th className="px-3 py-1.5 text-right">Qtd.</th>
                 <th className="px-3 py-1.5 text-right">Valor unit.</th>
@@ -137,6 +143,12 @@ export default function ImprimirOrcamento() {
         {proposta.mostrar_forma_pagamento && proposta.forma_pagamento && (
           <p className="text-sm text-gray-700 mb-4">
             <strong>Forma de pagamento:</strong> {proposta.forma_pagamento}
+          </p>
+        )}
+
+        {proposta.mostrar_garantia && proposta.garantia_texto && (
+          <p className="text-sm text-gray-700 mb-4">
+            <strong>Garantia:</strong> {proposta.garantia_texto}
           </p>
         )}
 

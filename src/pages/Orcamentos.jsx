@@ -8,7 +8,8 @@ import { Plus, Trash2, Pencil, Printer, FileText, X } from 'lucide-react'
 const TEXTOS_PADRAO = {
   higienizacao:
     'A higienização é realizada no próprio local, com o uso de bolsa coletora, permitindo a lavagem completa de todos os componentes da unidade evaporadora sem gerar sujeira ou respingos no ambiente. Utilizamos produtos específicos para higienização de aparelhos de ar-condicionado, que eliminam fungos, bactérias e odores sem causar desgaste ou corrosão nos componentes internos do equipamento.',
-  instalacao: '',
+  instalacao:
+    'A instalação é executada seguindo rigorosamente os padrões de fábrica do fabricante, incluindo o respeito à metragem mínima de tubulação recomendada para o modelo. Isso preserva a garantia do fabricante e contribui para prolongar a vida útil do equipamento.',
   manutencao: '',
 }
 
@@ -19,10 +20,33 @@ const AVISOS_PADRAO = {
   manutencao: '',
 }
 
+const GARANTIAS_PADRAO = {
+  higienizacao: '',
+  instalacao: 'Garantia de 1 ano sobre a instalação, a partir da data de conclusão do serviço.',
+  manutencao: '',
+}
+
+const MOSTRAR_GARANTIA_PADRAO = {
+  higienizacao: false,
+  instalacao: true,
+  manutencao: false,
+}
+
 const TIPO_LABEL = {
   higienizacao: 'Higienização',
   instalacao: 'Instalação',
   manutencao: 'Manutenção Corretiva',
+}
+
+// Rótulos do campo "item" mudam conforme o tipo de orçamento
+const ITEM_LABELS = {
+  higienizacao: { titulo: 'Itens (por local/ambiente)', campo: 'Local', placeholder: 'Ex: 2º andar, Sala do diretor' },
+  instalacao: {
+    titulo: 'Mão de obra e materiais',
+    campo: 'Item',
+    placeholder: 'Ex: Mão de obra - instalação, Tubulação de cobre 3/8"...',
+  },
+  manutencao: { titulo: 'Itens', campo: 'Item', placeholder: 'Ex: Mão de obra, Peça substituída...' },
 }
 
 const CAMPOS_VAZIOS = {
@@ -35,6 +59,8 @@ const CAMPOS_VAZIOS = {
   observacoes_complementares: '',
   forma_pagamento: 'Pix, cartão de débito/crédito ou dinheiro',
   mostrar_forma_pagamento: false,
+  garantia_texto: GARANTIAS_PADRAO.higienizacao,
+  mostrar_garantia: MOSTRAR_GARANTIA_PADRAO.higienizacao,
 }
 
 const ITEM_VAZIO = { local: '', descricao: '', quantidade: '1', valor_unitario: '' }
@@ -84,11 +110,14 @@ export default function Orcamentos() {
     // (evita apagar uma edição manual sem querer)
     const eraTextoPadrao = Object.values(TEXTOS_PADRAO).includes(form.texto_explicativo)
     const eraAvisoPadrao = Object.values(AVISOS_PADRAO).includes(form.aviso_padrao)
+    const eraGarantiaPadrao = Object.values(GARANTIAS_PADRAO).includes(form.garantia_texto)
     setForm({
       ...form,
       tipo,
       texto_explicativo: eraTextoPadrao ? TEXTOS_PADRAO[tipo] : form.texto_explicativo,
       aviso_padrao: eraAvisoPadrao ? AVISOS_PADRAO[tipo] : form.aviso_padrao,
+      garantia_texto: eraGarantiaPadrao ? GARANTIAS_PADRAO[tipo] : form.garantia_texto,
+      mostrar_garantia: eraGarantiaPadrao ? MOSTRAR_GARANTIA_PADRAO[tipo] : form.mostrar_garantia,
     })
   }
 
@@ -130,6 +159,8 @@ export default function Orcamentos() {
       observacoes_complementares: form.observacoes_complementares || null,
       forma_pagamento: form.forma_pagamento || null,
       mostrar_forma_pagamento: form.mostrar_forma_pagamento,
+      garantia_texto: form.garantia_texto || null,
+      mostrar_garantia: form.mostrar_garantia,
     }
 
     let propostaId = editandoId
@@ -181,6 +212,8 @@ export default function Orcamentos() {
       observacoes_complementares: proposta.observacoes_complementares || '',
       forma_pagamento: proposta.forma_pagamento || '',
       mostrar_forma_pagamento: proposta.mostrar_forma_pagamento || false,
+      garantia_texto: proposta.garantia_texto || '',
+      mostrar_garantia: proposta.mostrar_garantia || false,
     })
     setItens(
       (proposta.proposta_itens || [])
@@ -281,12 +314,12 @@ export default function Orcamentos() {
             />
           </div>
 
-          <p className="text-sm font-medium text-gray-700 mb-2">Itens (por local/ambiente)</p>
+          <p className="text-sm font-medium text-gray-700 mb-2">{ITEM_LABELS[form.tipo].titulo}</p>
           <div className="space-y-2 mb-2">
             {itens.map((item, i) => (
               <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-gray-50 rounded-lg p-2">
                 <input
-                  placeholder="Local (ex: 2º andar, Sala do diretor)"
+                  placeholder={ITEM_LABELS[form.tipo].placeholder}
                   value={item.local}
                   onChange={(e) => atualizarItem(i, 'local', e.target.value)}
                   className="sm:col-span-5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
@@ -327,7 +360,7 @@ export default function Orcamentos() {
             onClick={adicionarItem}
             className="flex items-center gap-1 text-sm text-primary-700 hover:bg-primary-50 rounded-lg px-3 py-1.5 mb-3"
           >
-            <Plus size={14} /> Adicionar local/item
+            <Plus size={14} /> Adicionar {ITEM_LABELS[form.tipo].campo.toLowerCase()}
           </button>
 
           <p className="text-sm text-gray-700 mb-3">
@@ -367,6 +400,26 @@ export default function Orcamentos() {
                 value={form.forma_pagamento}
                 onChange={(e) => setForm({ ...form, forma_pagamento: e.target.value })}
                 placeholder="Ex: Pix, cartão de débito/crédito ou dinheiro"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            )}
+          </div>
+
+          <div className="mb-3">
+            <label className="flex items-center gap-1.5 text-xs text-gray-600 mb-1">
+              <input
+                type="checkbox"
+                checked={form.mostrar_garantia}
+                onChange={(e) => setForm({ ...form, mostrar_garantia: e.target.checked })}
+              />
+              Mostrar garantia neste orçamento
+            </label>
+            {form.mostrar_garantia && (
+              <input
+                type="text"
+                value={form.garantia_texto}
+                onChange={(e) => setForm({ ...form, garantia_texto: e.target.value })}
+                placeholder="Ex: Garantia de 1 ano sobre a instalação..."
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               />
             )}
