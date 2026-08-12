@@ -38,6 +38,7 @@ const CAMPOS_VAZIOS = {
   endereco: '',
   observacoes: '',
   data_abertura: todayISO(),
+  cliente_final: '',
 }
 
 const CONCLUIR_VAZIO = {
@@ -49,6 +50,7 @@ const CONCLUIR_VAZIO = {
   garantiaReferenciaCustom: '',
   modoValor: 'detalhado',
   valorFechado: '',
+  faturamento: 'agora', // 'agora' | 'acumular'
 }
 const OPCOES_REFERENCIA_GARANTIA = ['do serviço', 'da instalação', 'da peça', 'do equipamento', 'Outro...']
 
@@ -126,6 +128,7 @@ export default function OrdensServico() {
       endereco: form.endereco || null,
       observacoes: form.observacoes || null,
       data_abertura: form.data_abertura,
+      cliente_final: form.cliente_final || null,
     }
 
     const { error } = editandoId
@@ -151,6 +154,7 @@ export default function OrdensServico() {
       endereco: os.endereco || '',
       observacoes: os.observacoes || '',
       data_abertura: os.data_abertura,
+      cliente_final: os.cliente_final || '',
     })
     setEditandoId(os.id)
     setMostrarForm(true)
@@ -294,6 +298,7 @@ export default function OrdensServico() {
       garantia_referencia: os.garantia_referencia || 'do serviço',
       modoValor: 'detalhado',
       valorFechado: '',
+      faturamento: 'agora',
     })
   }
 
@@ -323,26 +328,31 @@ export default function OrdensServico() {
       ? `Valor fechado (peças + mão de obra não discriminados)${totalPecas > 0 ? ` · Peças usadas somam ${formatCurrencyBRL(totalPecas)} pelo preço de tabela, só como referência de estoque` : ''}`
       : `Peças: ${formatCurrencyBRL(totalPecas)} · Mão de obra: ${formatCurrencyBRL(maoDeObra)}`
 
-    const { data: novoLancamento, error: erroLancamento } = await supabase
-      .from('lancamentos')
-      .insert({
-        tipo: 'receber',
-        descricao: descricaoLancamento,
-        valor: valorFinal,
-        data_vencimento: hoje,
-        data_competencia: hoje,
-        categoria_id: concluirForm.categoria_id || null,
-        centro_custo_id: os.centro_custo_id || null,
-        cliente_id: os.cliente_id || null,
-        equipamento_id: os.equipamento_id || null,
-        observacoes: `Gerado automaticamente pela conclusão da OS #${os.numero}. ${detalheValores}`,
-      })
-      .select()
-      .single()
+    let lancamentoId = null
 
-    if (erroLancamento) {
-      setErro(erroLancamento.message)
-      return
+    if (concluirForm.faturamento === 'agora') {
+      const { data: novoLancamento, error: erroLancamento } = await supabase
+        .from('lancamentos')
+        .insert({
+          tipo: 'receber',
+          descricao: descricaoLancamento,
+          valor: valorFinal,
+          data_vencimento: hoje,
+          data_competencia: hoje,
+          categoria_id: concluirForm.categoria_id || null,
+          centro_custo_id: os.centro_custo_id || null,
+          cliente_id: os.cliente_id || null,
+          equipamento_id: os.equipamento_id || null,
+          observacoes: `Gerado automaticamente pela conclusão da OS #${os.numero}. ${detalheValores}`,
+        })
+        .select()
+        .single()
+
+      if (erroLancamento) {
+        setErro(erroLancamento.message)
+        return
+      }
+      lancamentoId = novoLancamento.id
     }
 
     const { error: erroOS } = await supabase
@@ -359,7 +369,7 @@ export default function OrdensServico() {
             ? concluirForm.garantiaReferenciaCustom || 'do serviço'
             : concluirForm.garantia_referencia,
         categoria_id: concluirForm.categoria_id || null,
-        lancamento_id: novoLancamento.id,
+        lancamento_id: lancamentoId,
       })
       .eq('id', os.id)
 
@@ -441,6 +451,13 @@ export default function OrdensServico() {
               <option key={eq.id} value={eq.id}>{eq.nome}</option>
             ))}
           </select>
+
+          <input
+            placeholder="Cliente final (opcional — quando o cliente acima é um parceiro/intermediário)"
+            value={form.cliente_final}
+            onChange={(e) => setForm({ ...form, cliente_final: e.target.value })}
+            className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          />
 
           <textarea
             placeholder="Descrição do problema / serviço solicitado *"
@@ -547,6 +564,9 @@ export default function OrdensServico() {
                       {os.clientes?.telefone ? ` · ${os.clientes.telefone}` : ''}
                       {os.equipamentos?.nome ? ` · ${os.equipamentos.nome}` : ''}
                     </p>
+                    {os.cliente_final && (
+                      <p className="text-xs text-blue-600">Cliente final: {os.cliente_final}</p>
+                    )}
                     <p className="text-sm text-gray-600 mt-0.5 whitespace-pre-wrap">{os.descricao_problema}</p>
                     {os.status === 'finalizada' && os.servicos_realizados && (
                       <p className="text-xs text-gray-500 mt-1">
@@ -726,6 +746,33 @@ export default function OrdensServico() {
                       </button>
                     </div>
 
+                    <div className="flex gap-2 bg-white rounded-lg p-1 mb-2 border border-gray-200">
+                      <button
+                        type="button"
+                        onClick={() => setConcluirForm({ ...concluirForm, faturamento: 'agora' })}
+                        className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${
+                          concluirForm.faturamento === 'agora' ? 'bg-blue-600 text-white' : 'text-gray-500'
+                        }`}
+                      >
+                        Cobrar agora
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConcluirForm({ ...concluirForm, faturamento: 'acumular' })}
+                        className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${
+                          concluirForm.faturamento === 'acumular' ? 'bg-blue-600 text-white' : 'text-gray-500'
+                        }`}
+                      >
+                        Acumular p/ cobrar depois
+                      </button>
+                    </div>
+                    {concluirForm.faturamento === 'acumular' && (
+                      <p className="text-xs text-blue-700 mb-2">
+                        A OS fica finalizada com o valor registrado, mas <strong>não</strong> cria conta a receber
+                        agora. Depois, na tela do cliente, você junta várias OS's e gera uma cobrança consolidada.
+                      </p>
+                    )}
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
                       {concluirForm.modoValor === 'detalhado' ? (
                         <input
@@ -830,7 +877,8 @@ export default function OrdensServico() {
                         onClick={() => confirmarConclusao(os)}
                         className="flex items-center gap-1 rounded-lg bg-green-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-green-700"
                       >
-                        <CheckCircle2 size={14} /> Concluir e gerar conta a receber
+                        <CheckCircle2 size={14} />{' '}
+                        {concluirForm.faturamento === 'acumular' ? 'Concluir e acumular' : 'Concluir e gerar conta a receber'}
                       </button>
                     </div>
                   </div>

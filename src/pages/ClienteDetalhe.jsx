@@ -1,56 +1,70 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { formatDateBR, formatCurrencyBRL } from '../lib/format'
-import { ArrowLeft, ClipboardList, Receipt, FileText, Phone, MapPin } from 'lucide-react'
+import { formatDateBR, formatCurrencyBRL, todayISO } from '../lib/format'
+import { ArrowLeft, ClipboardList, Receipt, FileText, Phone, MapPin, DollarSign } from 'lucide-react'
 
 export default function ClienteDetalhe() {
   const { id } = useParams()
   const [cliente, setCliente] = useState(null)
   const [ordens, setOrdens] = useState([])
+  const [pendentes, setPendentes] = useState([]) // OS finalizadas sem cobrança gerada
   const [lancamentos, setLancamentos] = useState([])
   const [propostas, setPropostas] = useState([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
+  const [selecionadas, setSelecionadas] = useState(new Set())
+  const [gerando, setGerando] = useState(false)
+
+  async function carregar() {
+    setLoading(true)
+    const [clienteRes, osRes, pendRes, lancRes, propRes] = await Promise.all([
+      supabase.from('clientes').select('*').eq('id', id).single(),
+      supabase
+        .from('ordens_servico')
+        .select('id, numero, status, descricao_problema, data_abertura, valor_final, cliente_final, equipamentos(nome)')
+        .eq('cliente_id', id)
+        .order('numero', { ascending: false })
+        .range(0, 9999),
+      supabase
+        .from('ordens_servico')
+        .select('id, numero, descricao_problema, data_conclusao, valor_final, cliente_final, categoria_id, equipamento_id')
+        .eq('cliente_id', id)
+        .eq('status', 'finalizada')
+        .is('lancamento_id', null)
+        .order('numero', { ascending: true }),
+      supabase
+        .from('lancamentos')
+        .select('id, descricao, valor, valor_pago, status, data_vencimento, data_pagamento')
+        .eq('cliente_id', id)
+        .eq('tipo', 'receber')
+        .order('data_vencimento', { ascending: false })
+        .range(0, 9999),
+      supabase
+        .from('propostas')
+        .select('id, numero, tipo, status, data_emissao, proposta_itens(quantidade, valor_unitario)')
+        .eq('cliente_id', id)
+        .order('numero', { ascending: false })
+        .range(0, 9999),
+    ])
+
+    if (clienteRes.error) {
+      setErro(clienteRes.error.message)
+      setLoading(false)
+      return
+    }
+    setCliente(clienteRes.data)
+    setOrdens(osRes.data || [])
+    setPendentes(pendRes.data || [])
+    setLancamentos(lancRes.data || [])
+    setPropostas(propRes.data || [])
+    setSelecionadas(new Set((pendRes.data || []).map((o) => o.id))) // já vem tudo selecionado por padrão
+    setLoading(false)
+  }
 
   useEffect(() => {
-    async function carregar() {
-      setLoading(true)
-      const [clienteRes, osRes, lancRes, propRes] = await Promise.all([
-        supabase.from('clientes').select('*').eq('id', id).single(),
-        supabase
-          .from('ordens_servico')
-          .select('id, numero, status, descricao_problema, data_abertura, valor_final, equipamentos(nome)')
-          .eq('cliente_id', id)
-          .order('numero', { ascending: false })
-          .range(0, 9999),
-        supabase
-          .from('lancamentos')
-          .select('id, descricao, valor, valor_pago, status, data_vencimento, data_pagamento')
-          .eq('cliente_id', id)
-          .eq('tipo', 'receber')
-          .order('data_vencimento', { ascending: false })
-          .range(0, 9999),
-        supabase
-          .from('propostas')
-          .select('id, numero, tipo, status, data_emissao, proposta_itens(quantidade, valor_unitario)')
-          .eq('cliente_id', id)
-          .order('numero', { ascending: false })
-          .range(0, 9999),
-      ])
-
-      if (clienteRes.error) {
-        setErro(clienteRes.error.message)
-        setLoading(false)
-        return
-      }
-      setCliente(clienteRes.data)
-      setOrdens(osRes.data || [])
-      setLancamentos(lancRes.data || [])
-      setPropostas(propRes.data || [])
-      setLoading(false)
-    }
     carregar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   if (loading) return <p className="text-gray-400 text-sm">Carregando...</p>
@@ -59,6 +73,66 @@ export default function ClienteDetalhe() {
 
   const totalRecebido = lancamentos.filter((l) => l.status === 'pago').reduce((acc, l) => acc + Number(l.valor_pago), 0)
   const totalEmAberto = lancamentos.filter((l) => l.status === 'aberto').reduce((acc, l) => acc + Number(l.valor), 0)
+  const totalPendenteCobranca = pendentes.reduce((acc, o) => acc + Number(o.valor_final || 0), 0)
+  const totalSelecionado = pendentes
+    .filter((o) => selecionadas.has(o.id))
+    .reduce((acc, o) => acc + Number(o.valor_final || 0), 0)
+
+  function alternarSelecao(osId) {
+    const novas = new Set(selecionadas)
+    if (novas.has(osId)) novas.delete(osId)
+    else novas.add(osId)
+    setSelecionadas(novas)
+  }
+
+  async function gerarCobrancaConsolidada() {
+    const osSelecionadas = pendentes.filter((o) => selecionadas.has(o.id))
+    if (osSelecionadas.length === 0) {
+      setErro('Selecione pelo menos uma OS para gerar a cobrança.')
+      return
+    }
+    setGerando(true)
+    setErro(null)
+
+    const valorTotal = osSelecionadas.reduce((acc, o) => acc + Number(o.valor_final || 0), 0)
+    const numeros = osSelecionadas.map((o) => `#${o.numero}`).join(', ')
+    const hoje = todayISO()
+
+    const { data: novoLancamento, error: erroLancamento } = await supabase
+      .from('lancamentos')
+      .insert({
+        tipo: 'receber',
+        descricao: `Cobrança consolidada — ${osSelecionadas.length} OS (${numeros})`.substring(0, 250),
+        valor: valorTotal,
+        data_vencimento: hoje,
+        data_competencia: hoje,
+        cliente_id: id,
+        categoria_id: osSelecionadas[0].categoria_id || null,
+        observacoes: `Cobrança consolidada gerada a partir das OS: ${numeros}.`,
+      })
+      .select()
+      .single()
+
+    if (erroLancamento) {
+      setErro(erroLancamento.message)
+      setGerando(false)
+      return
+    }
+
+    const { error: erroOS } = await supabase
+      .from('ordens_servico')
+      .update({ lancamento_id: novoLancamento.id })
+      .in('id', osSelecionadas.map((o) => o.id))
+
+    if (erroOS) {
+      setErro(erroOS.message)
+      setGerando(false)
+      return
+    }
+
+    setGerando(false)
+    carregar()
+  }
 
   return (
     <div className="max-w-4xl">
@@ -83,7 +157,7 @@ export default function ClienteDetalhe() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         <div className="bg-white border border-gray-200 rounded-lg p-3">
           <p className="text-xs text-gray-500">Total recebido</p>
           <p className="text-lg font-bold text-green-600">{formatCurrencyBRL(totalRecebido)}</p>
@@ -93,10 +167,59 @@ export default function ClienteDetalhe() {
           <p className="text-lg font-bold text-amber-600">{formatCurrencyBRL(totalEmAberto)}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-3">
+          <p className="text-xs text-gray-500">Aguardando cobrança</p>
+          <p className="text-lg font-bold text-blue-600">{formatCurrencyBRL(totalPendenteCobranca)}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-3">
           <p className="text-xs text-gray-500">Ordens de serviço</p>
           <p className="text-lg font-bold text-gray-900">{ordens.length}</p>
         </div>
       </div>
+
+      {erro && <div className="mb-4 rounded-lg bg-red-50 text-red-700 text-sm px-4 py-2">{erro}</div>}
+
+      {pendentes.length > 0 && (
+        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-blue-900 mb-1">
+            <DollarSign size={15} /> OS's finalizadas aguardando cobrança
+          </h3>
+          <p className="text-xs text-blue-700 mb-3">
+            Marque quais OS's você quer juntar numa única cobrança agora (por padrão todas já vêm marcadas).
+          </p>
+          <ul className="space-y-1 mb-3">
+            {pendentes.map((o) => (
+              <li key={o.id} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={selecionadas.has(o.id)}
+                  onChange={() => alternarSelecao(o.id)}
+                  className="shrink-0"
+                />
+                <span className="flex-1 text-gray-700">
+                  <span className="text-xs font-mono text-gray-400">#{o.numero}</span> {o.descricao_problema}
+                  {o.cliente_final ? ` · Cliente final: ${o.cliente_final}` : ''}
+                  <span className="block text-xs text-gray-400">
+                    Concluída em {o.data_conclusao ? formatDateBR(o.data_conclusao) : '—'}
+                  </span>
+                </span>
+                <span className="font-medium text-gray-800">{formatCurrencyBRL(o.valor_final)}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-blue-900">
+              Total selecionado: <strong>{formatCurrencyBRL(totalSelecionado)}</strong>
+            </p>
+            <button
+              onClick={gerarCobrancaConsolidada}
+              disabled={gerando || selecionadas.size === 0}
+              className="flex items-center gap-1 rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            >
+              <Receipt size={15} /> {gerando ? 'Gerando...' : 'Gerar cobrança consolidada'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="mb-6">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
@@ -110,7 +233,10 @@ export default function ClienteDetalhe() {
                   <span className="text-xs font-mono text-gray-400">#{os.numero}</span> {os.descricao_problema}
                   {os.equipamentos?.nome ? ` · ${os.equipamentos.nome}` : ''}
                 </p>
-                <p className="text-xs text-gray-500">{formatDateBR(os.data_abertura)}</p>
+                <p className="text-xs text-gray-500">
+                  {formatDateBR(os.data_abertura)}
+                  {os.cliente_final ? ` · Cliente final: ${os.cliente_final}` : ''}
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 {os.valor_final != null && <span className="text-sm text-gray-700">{formatCurrencyBRL(os.valor_final)}</span>}
