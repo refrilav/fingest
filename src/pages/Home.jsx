@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom'
-import { ClipboardList, FileText, Users, Wallet, Archive, Plus } from 'lucide-react'
+import { ClipboardList, FileText, Users, Wallet, Package, Archive, Plus } from 'lucide-react'
 
 const CARDS = [
   { to: '/ordens-servico', label: 'Ordens de Serviço', icon: ClipboardList, color: 'bg-primary-50 text-primary-600' },
   { to: '/orcamentos', label: 'Orçamentos', icon: FileText, color: 'bg-amber-50 text-amber-600' },
   { to: '/clientes', label: 'Clientes', icon: Users, color: 'bg-green-50 text-green-600' },
   { to: '/financeiro', label: 'Financeiro', icon: Wallet, color: 'bg-blue-50 text-blue-600' },
+  { to: '/estoque', label: 'Estoque', icon: Package, color: 'bg-teal-50 text-teal-600' },
   { to: '/cadastros', label: 'Cadastros', icon: Archive, color: 'bg-gray-100 text-gray-600' },
 ]
 
