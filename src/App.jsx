@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/AuthContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
 import Lancamentos from './pages/Lancamentos'
 import Conciliacao from './pages/Conciliacao'
 import Relatorios from './pages/Relatorios'
@@ -72,7 +71,6 @@ function Rotas() {
         <Route path="financeiro" element={<Financeiro />} />
         <Route path="cadastros" element={<Cadastros />} />
         <Route path="ordens-servico" element={<OrdensServico />} />
-        <Route path="dashboard" element={<Dashboard />} />
         <Route path="orcamentos" element={<Orcamentos />} />
         <Route path="estoque" element={<Estoque />} />
         <Route path="contas-a-pagar" element={<Lancamentos tipo="pagar" />} />

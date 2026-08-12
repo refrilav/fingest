@@ -116,7 +116,6 @@ export default function OrdensServico() {
 
   async function salvar(e) {
     e.preventDefault()
-    if (!form.descricao_problema.trim()) return
 
     const payload = {
       cliente_id: form.cliente_id || null,
@@ -460,12 +459,11 @@ export default function OrdensServico() {
           />
 
           <textarea
-            placeholder="Descrição do problema / serviço solicitado *"
+            placeholder="Descrição do problema / serviço solicitado (opcional)"
             value={form.descricao_problema}
             onChange={(e) => setForm({ ...form, descricao_problema: e.target.value })}
             className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
             rows={2}
-            required
           />
           <label className="col-span-1 sm:col-span-2 flex items-center gap-1.5 text-xs text-gray-500 -mt-2">
             <input

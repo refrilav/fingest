@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
 import {
   ArrowLeft,
-  LayoutDashboard,
   ArrowUpCircle,
   ArrowDownCircle,
   Landmark,
@@ -12,7 +11,6 @@ import {
 } from 'lucide-react'
 
 const CARDS = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'bg-primary-50 text-primary-600' },
   { to: '/contas-a-pagar', label: 'Contas a Pagar', icon: ArrowUpCircle, color: 'bg-red-50 text-red-600' },
   { to: '/contas-a-receber', label: 'Contas a Receber', icon: ArrowDownCircle, color: 'bg-green-50 text-green-600' },
   { to: '/conciliacao', label: 'Conciliação Bancária', icon: Landmark, color: 'bg-blue-50 text-blue-600' },
