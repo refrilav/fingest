@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   ClipboardList,
+  FileText,
   Package,
   ArrowDownCircle,
   ArrowUpCircle,
@@ -22,6 +23,7 @@ import { useAuth } from '../lib/AuthContext'
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/ordens-servico', label: 'Ordens de Serviço', icon: ClipboardList },
+  { to: '/orcamentos', label: 'Orçamentos', icon: FileText },
   { to: '/estoque', label: 'Estoque', icon: Package },
   { to: '/contas-a-pagar', label: 'Contas a Pagar', icon: ArrowUpCircle },
   { to: '/contas-a-receber', label: 'Contas a Receber', icon: ArrowDownCircle },

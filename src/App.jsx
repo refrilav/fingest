@@ -19,6 +19,8 @@ import OrdensServico from './pages/OrdensServico'
 import Estoque from './pages/Estoque'
 import ImprimirOS from './pages/ImprimirOS'
 import Recibo from './pages/Recibo'
+import Orcamentos from './pages/Orcamentos'
+import ImprimirOrcamento from './pages/ImprimirOrcamento'
 function RotaProtegida({ children }) {
   const { session, loading } = useAuth()
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">Carregando...</div>
@@ -47,6 +49,14 @@ function Rotas() {
         }
       />
       <Route
+        path="/orcamentos/:id/imprimir"
+        element={
+          <RotaProtegida>
+            <ImprimirOrcamento />
+          </RotaProtegida>
+        }
+      />
+      <Route
         path="/"
         element={
           <RotaProtegida>
@@ -56,6 +66,7 @@ function Rotas() {
       >
         <Route index element={<Dashboard />} />
         <Route path="ordens-servico" element={<OrdensServico />} />
+        <Route path="orcamentos" element={<Orcamentos />} />
         <Route path="estoque" element={<Estoque />} />
         <Route path="contas-a-pagar" element={<Lancamentos tipo="pagar" />} />
         <Route path="contas-a-receber" element={<Lancamentos tipo="receber" />} />
