@@ -31,9 +31,9 @@ const CARDS = [
     accent: 'text-sky-700 bg-sky-50 group-hover:bg-sky-100',
   },
   {
-    to: '/estoque',
-    label: 'Estoque',
-    desc: 'Peças e materiais disponíveis',
+    to: '/vendas',
+    label: 'Vendas',
+    desc: 'Venda de peças e estoque',
     icon: Package,
     accent: 'text-teal-700 bg-teal-50 group-hover:bg-teal-100',
   },

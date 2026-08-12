@@ -2,23 +2,25 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO } from '../lib/format'
-import { ArrowLeft, ClipboardList, Receipt, FileText, Phone, MapPin, DollarSign, Printer, X } from 'lucide-react'
+import { ArrowLeft, ClipboardList, Receipt, FileText, Phone, MapPin, DollarSign, Printer, X, Package } from 'lucide-react'
 
 export default function ClienteDetalhe() {
   const { id } = useParams()
   const [cliente, setCliente] = useState(null)
   const [ordens, setOrdens] = useState([])
-  const [pendentes, setPendentes] = useState([]) // OS finalizadas sem cobrança gerada
+  const [vendas, setVendas] = useState([])
+  const [osPendentes, setOsPendentes] = useState([]) // OS finalizadas sem cobrança gerada
+  const [vendasPendentes, setVendasPendentes] = useState([]) // Vendas sem cobrança gerada
   const [lancamentos, setLancamentos] = useState([])
   const [propostas, setPropostas] = useState([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
-  const [selecionadas, setSelecionadas] = useState(new Set())
+  const [selecionadas, setSelecionadas] = useState(new Set()) // chaves tipo "os-<id>" ou "venda-<id>"
   const [gerando, setGerando] = useState(false)
 
   async function carregar() {
     setLoading(true)
-    const [clienteRes, osRes, pendRes, lancRes, propRes] = await Promise.all([
+    const [clienteRes, osRes, vendasRes, osPendRes, vendasPendRes, lancRes, propRes] = await Promise.all([
       supabase.from('clientes').select('*').eq('id', id).single(),
       supabase
         .from('ordens_servico')
@@ -27,10 +29,22 @@ export default function ClienteDetalhe() {
         .order('numero', { ascending: false })
         .range(0, 9999),
       supabase
+        .from('vendas')
+        .select('id, numero, data_venda, lancamento_id, venda_itens(quantidade, valor_unitario, nome_peca)')
+        .eq('cliente_id', id)
+        .order('numero', { ascending: false })
+        .range(0, 9999),
+      supabase
         .from('ordens_servico')
         .select('id, numero, descricao_problema, data_conclusao, valor_final, cliente_final, categoria_id, equipamento_id')
         .eq('cliente_id', id)
         .eq('status', 'finalizada')
+        .is('lancamento_id', null)
+        .order('numero', { ascending: true }),
+      supabase
+        .from('vendas')
+        .select('id, numero, data_venda, venda_itens(quantidade, valor_unitario, nome_peca)')
+        .eq('cliente_id', id)
         .is('lancamento_id', null)
         .order('numero', { ascending: true }),
       supabase
@@ -55,10 +69,18 @@ export default function ClienteDetalhe() {
     }
     setCliente(clienteRes.data)
     setOrdens(osRes.data || [])
-    setPendentes(pendRes.data || [])
+    setVendas(vendasRes.data || [])
+    setOsPendentes(osPendRes.data || [])
+    setVendasPendentes(vendasPendRes.data || [])
     setLancamentos(lancRes.data || [])
     setPropostas(propRes.data || [])
-    setSelecionadas(new Set((pendRes.data || []).map((o) => o.id))) // já vem tudo selecionado por padrão
+    // já vem tudo selecionado por padrão
+    setSelecionadas(
+      new Set([
+        ...(osPendRes.data || []).map((o) => `os-${o.id}`),
+        ...(vendasPendRes.data || []).map((v) => `venda-${v.id}`),
+      ])
+    )
     setLoading(false)
   }
 
@@ -71,45 +93,61 @@ export default function ClienteDetalhe() {
   if (erro) return <div className="rounded-lg bg-red-50 text-red-700 text-sm px-4 py-2 max-w-lg">{erro}</div>
   if (!cliente) return null
 
+  function totalVenda(v) {
+    return (v.venda_itens || []).reduce((acc, i) => acc + Number(i.quantidade) * Number(i.valor_unitario), 0)
+  }
+
   const totalRecebido = lancamentos.filter((l) => l.status === 'pago').reduce((acc, l) => acc + Number(l.valor_pago), 0)
   const totalEmAberto = lancamentos.filter((l) => l.status === 'aberto').reduce((acc, l) => acc + Number(l.valor), 0)
-  const totalPendenteCobranca = pendentes.reduce((acc, o) => acc + Number(o.valor_final || 0), 0)
-  const totalSelecionado = pendentes
-    .filter((o) => selecionadas.has(o.id))
-    .reduce((acc, o) => acc + Number(o.valor_final || 0), 0)
-  const lancamentosComOS = new Set(ordens.filter((o) => o.lancamento_id).map((o) => o.lancamento_id))
+  const totalPendenteCobranca =
+    osPendentes.reduce((acc, o) => acc + Number(o.valor_final || 0), 0) +
+    vendasPendentes.reduce((acc, v) => acc + totalVenda(v), 0)
+  const totalSelecionado =
+    osPendentes.filter((o) => selecionadas.has(`os-${o.id}`)).reduce((acc, o) => acc + Number(o.valor_final || 0), 0) +
+    vendasPendentes.filter((v) => selecionadas.has(`venda-${v.id}`)).reduce((acc, v) => acc + totalVenda(v), 0)
+  const lancamentosVinculados = new Set([
+    ...ordens.filter((o) => o.lancamento_id).map((o) => o.lancamento_id),
+    ...vendas.filter((v) => v.lancamento_id).map((v) => v.lancamento_id),
+  ])
 
-  function alternarSelecao(osId) {
+  function alternarSelecao(chave) {
     const novas = new Set(selecionadas)
-    if (novas.has(osId)) novas.delete(osId)
-    else novas.add(osId)
+    if (novas.has(chave)) novas.delete(chave)
+    else novas.add(chave)
     setSelecionadas(novas)
   }
 
   async function gerarCobrancaConsolidada() {
-    const osSelecionadas = pendentes.filter((o) => selecionadas.has(o.id))
-    if (osSelecionadas.length === 0) {
-      setErro('Selecione pelo menos uma OS para gerar a cobrança.')
+    const osSelecionadas = osPendentes.filter((o) => selecionadas.has(`os-${o.id}`))
+    const vendasSelecionadas = vendasPendentes.filter((v) => selecionadas.has(`venda-${v.id}`))
+
+    if (osSelecionadas.length === 0 && vendasSelecionadas.length === 0) {
+      setErro('Selecione pelo menos uma OS ou venda para gerar a cobrança.')
       return
     }
     setGerando(true)
     setErro(null)
 
-    const valorTotal = osSelecionadas.reduce((acc, o) => acc + Number(o.valor_final || 0), 0)
-    const numeros = osSelecionadas.map((o) => `#${o.numero}`).join(', ')
+    const valorTotal =
+      osSelecionadas.reduce((acc, o) => acc + Number(o.valor_final || 0), 0) +
+      vendasSelecionadas.reduce((acc, v) => acc + totalVenda(v), 0)
+
+    const refsOS = osSelecionadas.map((o) => `OS #${o.numero}`)
+    const refsVendas = vendasSelecionadas.map((v) => `Venda #${v.numero}`)
+    const referencias = [...refsOS, ...refsVendas].join(', ')
     const hoje = todayISO()
 
     const { data: novoLancamento, error: erroLancamento } = await supabase
       .from('lancamentos')
       .insert({
         tipo: 'receber',
-        descricao: `Cobrança consolidada — ${osSelecionadas.length} OS (${numeros})`.substring(0, 250),
+        descricao: `Cobrança consolidada — ${referencias}`.substring(0, 250),
         valor: valorTotal,
         data_vencimento: hoje,
         data_competencia: hoje,
         cliente_id: id,
-        categoria_id: osSelecionadas[0].categoria_id || null,
-        observacoes: `Cobrança consolidada gerada a partir das OS: ${numeros}.`,
+        categoria_id: osSelecionadas[0]?.categoria_id || null,
+        observacoes: `Cobrança consolidada gerada a partir de: ${referencias}.`,
       })
       .select()
       .single()
@@ -120,15 +158,28 @@ export default function ClienteDetalhe() {
       return
     }
 
-    const { error: erroOS } = await supabase
-      .from('ordens_servico')
-      .update({ lancamento_id: novoLancamento.id })
-      .in('id', osSelecionadas.map((o) => o.id))
+    if (osSelecionadas.length > 0) {
+      const { error: erroOS } = await supabase
+        .from('ordens_servico')
+        .update({ lancamento_id: novoLancamento.id })
+        .in('id', osSelecionadas.map((o) => o.id))
+      if (erroOS) {
+        setErro(erroOS.message)
+        setGerando(false)
+        return
+      }
+    }
 
-    if (erroOS) {
-      setErro(erroOS.message)
-      setGerando(false)
-      return
+    if (vendasSelecionadas.length > 0) {
+      const { error: erroVendas } = await supabase
+        .from('vendas')
+        .update({ lancamento_id: novoLancamento.id })
+        .in('id', vendasSelecionadas.map((v) => v.id))
+      if (erroVendas) {
+        setErro(erroVendas.message)
+        setGerando(false)
+        return
+      }
     }
 
     setGerando(false)
@@ -138,20 +189,20 @@ export default function ClienteDetalhe() {
   async function cancelarCobranca(lancamentoId) {
     if (
       !confirm(
-        'Cancelar esta cobrança? As OS\'s vinculadas voltam pra lista "aguardando cobrança" e você pode gerar uma nova depois.'
+        'Cancelar esta cobrança? As OS\'s/vendas vinculadas voltam pra lista "aguardando cobrança" e você pode gerar uma nova depois.'
       )
     )
       return
 
     setErro(null)
 
-    const { error: erroOS } = await supabase
-      .from('ordens_servico')
-      .update({ lancamento_id: null })
-      .eq('lancamento_id', lancamentoId)
+    const [{ error: erroOS }, { error: erroVendas }] = await Promise.all([
+      supabase.from('ordens_servico').update({ lancamento_id: null }).eq('lancamento_id', lancamentoId),
+      supabase.from('vendas').update({ lancamento_id: null }).eq('lancamento_id', lancamentoId),
+    ])
 
-    if (erroOS) {
-      setErro(erroOS.message)
+    if (erroOS || erroVendas) {
+      setErro((erroOS || erroVendas).message)
       return
     }
 
@@ -212,31 +263,47 @@ export default function ClienteDetalhe() {
 
       {erro && <div className="mb-4 rounded-lg bg-red-50 text-red-700 text-sm px-4 py-2">{erro}</div>}
 
-      {pendentes.length > 0 && (
+      {(osPendentes.length > 0 || vendasPendentes.length > 0) && (
         <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-blue-900 mb-1">
-            <DollarSign size={15} /> OS's finalizadas aguardando cobrança
+            <DollarSign size={15} /> OS's e vendas aguardando cobrança
           </h3>
           <p className="text-xs text-blue-700 mb-3">
-            Marque quais OS's você quer juntar numa única cobrança agora (por padrão todas já vêm marcadas).
+            Marque o que você quer juntar numa única cobrança agora (por padrão tudo já vem marcado).
           </p>
           <ul className="space-y-1 mb-3">
-            {pendentes.map((o) => (
-              <li key={o.id} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 text-sm">
+            {osPendentes.map((o) => (
+              <li key={`os-${o.id}`} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 text-sm">
                 <input
                   type="checkbox"
-                  checked={selecionadas.has(o.id)}
-                  onChange={() => alternarSelecao(o.id)}
+                  checked={selecionadas.has(`os-${o.id}`)}
+                  onChange={() => alternarSelecao(`os-${o.id}`)}
                   className="shrink-0"
                 />
                 <span className="flex-1 text-gray-700">
-                  <span className="text-xs font-mono text-gray-400">#{o.numero}</span> {o.descricao_problema}
+                  <span className="text-xs font-mono text-gray-400">OS #{o.numero}</span> {o.descricao_problema}
                   {o.cliente_final ? ` · Cliente final: ${o.cliente_final}` : ''}
                   <span className="block text-xs text-gray-400">
                     Concluída em {o.data_conclusao ? formatDateBR(o.data_conclusao) : '—'}
                   </span>
                 </span>
                 <span className="font-medium text-gray-800">{formatCurrencyBRL(o.valor_final)}</span>
+              </li>
+            ))}
+            {vendasPendentes.map((v) => (
+              <li key={`venda-${v.id}`} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={selecionadas.has(`venda-${v.id}`)}
+                  onChange={() => alternarSelecao(`venda-${v.id}`)}
+                  className="shrink-0"
+                />
+                <span className="flex-1 text-gray-700">
+                  <span className="text-xs font-mono text-gray-400">Venda #{v.numero}</span>{' '}
+                  {(v.venda_itens || []).map((i) => i.nome_peca).join(', ')}
+                  <span className="block text-xs text-gray-400">{formatDateBR(v.data_venda)}</span>
+                </span>
+                <span className="font-medium text-gray-800">{formatCurrencyBRL(totalVenda(v))}</span>
               </li>
             ))}
           </ul>
@@ -282,6 +349,28 @@ export default function ClienteDetalhe() {
         </ul>
       </div>
 
+      {vendas.length > 0 && (
+        <div className="mb-6">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+            <Package size={15} /> Vendas de Peças
+          </h3>
+          <ul className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100">
+            {vendas.map((v) => (
+              <li key={v.id} className="flex items-center justify-between px-4 py-2.5">
+                <div>
+                  <p className="text-sm text-gray-800">
+                    <span className="text-xs font-mono text-gray-400">#{v.numero}</span>{' '}
+                    {(v.venda_itens || []).map((i) => i.nome_peca).join(', ')}
+                  </p>
+                  <p className="text-xs text-gray-500">{formatDateBR(v.data_venda)}</p>
+                </div>
+                <span className="text-sm text-gray-700">{formatCurrencyBRL(totalVenda(v))}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="mb-6">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
           <Receipt size={15} /> Financeiro (Contas a Receber)
@@ -301,19 +390,19 @@ export default function ClienteDetalhe() {
                   {formatCurrencyBRL(l.status === 'pago' ? l.valor_pago : l.valor)}
                 </span>
                 <StatusBadgeLancamento status={l.status} />
-                {lancamentosComOS.has(l.id) && (
+                {lancamentosVinculados.has(l.id) && (
                   <Link
                     to={`/cobranca/${l.id}/imprimir`}
-                    title="Ver relatório das OS's incluídas"
+                    title="Ver relatório das OS's/vendas incluídas"
                     className="text-gray-400 hover:text-primary-600 p-1 rounded"
                   >
                     <Printer size={15} />
                   </Link>
                 )}
-                {lancamentosComOS.has(l.id) && l.status === 'aberto' && (
+                {lancamentosVinculados.has(l.id) && l.status === 'aberto' && (
                   <button
                     onClick={() => cancelarCobranca(l.id)}
-                    title="Cancelar esta cobrança e liberar as OS's pra gerar de novo"
+                    title="Cancelar esta cobrança e liberar as OS's/vendas pra gerar de novo"
                     className="text-gray-400 hover:text-red-600 p-1 rounded"
                   >
                     <X size={15} />

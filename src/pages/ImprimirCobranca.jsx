@@ -8,13 +8,14 @@ export default function ImprimirCobranca() {
   const { id } = useParams() // id do lançamento (cobrança consolidada)
   const [lancamento, setLancamento] = useState(null)
   const [ordens, setOrdens] = useState([])
+  const [vendas, setVendas] = useState([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
 
   useEffect(() => {
     async function carregar() {
       setLoading(true)
-      const [lancRes, osRes] = await Promise.all([
+      const [lancRes, osRes, vendasRes] = await Promise.all([
         supabase
           .from('lancamentos')
           .select('*, clientes(nome, telefone, documento, endereco)')
@@ -23,6 +24,11 @@ export default function ImprimirCobranca() {
         supabase
           .from('ordens_servico')
           .select('id, numero, descricao_problema, servicos_realizados, cliente_final, data_conclusao, valor_final, equipamentos(nome)')
+          .eq('lancamento_id', id)
+          .order('numero', { ascending: true }),
+        supabase
+          .from('vendas')
+          .select('id, numero, data_venda, venda_itens(nome_peca, quantidade, valor_unitario)')
           .eq('lancamento_id', id)
           .order('numero', { ascending: true }),
       ])
@@ -34,6 +40,7 @@ export default function ImprimirCobranca() {
       }
       setLancamento(lancRes.data)
       setOrdens(osRes.data || [])
+      setVendas(vendasRes.data || [])
       setLoading(false)
       document.title = `Relatorio_OS_${lancRes.data.clientes?.nome || 'cobranca'}`
     }
@@ -45,6 +52,10 @@ export default function ImprimirCobranca() {
   if (!lancamento) return null
 
   const totalOS = ordens.reduce((acc, o) => acc + Number(o.valor_final || 0), 0)
+  const totalVendas = vendas.reduce(
+    (acc, v) => acc + (v.venda_itens || []).reduce((a, i) => a + Number(i.quantidade) * Number(i.valor_unitario), 0),
+    0
+  )
 
   return (
     <div className="max-w-2xl mx-auto py-6 px-4 print:p-0 print:max-w-full">
@@ -81,52 +92,90 @@ export default function ImprimirCobranca() {
           {lancamento.clientes?.telefone && <p className="text-gray-600">{lancamento.clientes.telefone}</p>}
         </div>
 
-        <div className="mb-4">
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Ordens de serviço incluídas</p>
-          <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
-            <thead>
-              <tr className="bg-gray-50 text-left text-xs text-gray-500">
-                <th className="px-3 py-1.5">OS</th>
-                <th className="px-3 py-1.5">Cliente final</th>
-                <th className="px-3 py-1.5">Serviço</th>
-                <th className="px-3 py-1.5">Conclusão</th>
-                <th className="px-3 py-1.5 text-right">Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ordens.map((os) => (
-                <tr key={os.id} className="border-t border-gray-100 align-top">
-                  <td className="px-3 py-1.5 text-gray-700 font-mono text-xs">#{os.numero}</td>
-                  <td className="px-3 py-1.5 text-gray-700">{os.cliente_final || '—'}</td>
-                  <td className="px-3 py-1.5 text-gray-600">
-                    {os.servicos_realizados || os.descricao_problema || '—'}
-                    {os.equipamentos?.nome ? ` (${os.equipamentos.nome})` : ''}
-                  </td>
-                  <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">
-                    {os.data_conclusao ? formatDateBR(os.data_conclusao) : '—'}
-                  </td>
-                  <td className="px-3 py-1.5 text-right text-gray-700 whitespace-nowrap">
-                    {formatCurrencyBRL(os.valor_final)}
-                  </td>
+        {ordens.length > 0 && (
+          <div className="mb-4">
+            <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Ordens de serviço incluídas</p>
+            <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+              <thead>
+                <tr className="bg-gray-50 text-left text-xs text-gray-500">
+                  <th className="px-3 py-1.5">OS</th>
+                  <th className="px-3 py-1.5">Cliente final</th>
+                  <th className="px-3 py-1.5">Serviço</th>
+                  <th className="px-3 py-1.5">Conclusão</th>
+                  <th className="px-3 py-1.5 text-right">Valor</th>
                 </tr>
-              ))}
-              {ordens.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-3 py-3 text-center text-gray-400">
-                    Nenhuma OS vinculada a esta cobrança.
-                  </td>
+              </thead>
+              <tbody>
+                {ordens.map((os) => (
+                  <tr key={os.id} className="border-t border-gray-100 align-top">
+                    <td className="px-3 py-1.5 text-gray-700 font-mono text-xs">#{os.numero}</td>
+                    <td className="px-3 py-1.5 text-gray-700">{os.cliente_final || '—'}</td>
+                    <td className="px-3 py-1.5 text-gray-600">
+                      {os.servicos_realizados || os.descricao_problema || '—'}
+                      {os.equipamentos?.nome ? ` (${os.equipamentos.nome})` : ''}
+                    </td>
+                    <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">
+                      {os.data_conclusao ? formatDateBR(os.data_conclusao) : '—'}
+                    </td>
+                    <td className="px-3 py-1.5 text-right text-gray-700 whitespace-nowrap">
+                      {formatCurrencyBRL(os.valor_final)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {vendas.length > 0 && (
+          <div className="mb-4">
+            <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Vendas de peças incluídas</p>
+            <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+              <thead>
+                <tr className="bg-gray-50 text-left text-xs text-gray-500">
+                  <th className="px-3 py-1.5">Venda</th>
+                  <th className="px-3 py-1.5">Peças</th>
+                  <th className="px-3 py-1.5">Data</th>
+                  <th className="px-3 py-1.5 text-right">Valor</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {vendas.map((v) => {
+                  const totalV = (v.venda_itens || []).reduce((acc, i) => acc + Number(i.quantidade) * Number(i.valor_unitario), 0)
+                  return (
+                    <tr key={v.id} className="border-t border-gray-100 align-top">
+                      <td className="px-3 py-1.5 text-gray-700 font-mono text-xs">#{v.numero}</td>
+                      <td className="px-3 py-1.5 text-gray-600">
+                        {(v.venda_itens || []).map((i) => `${i.quantidade}x ${i.nome_peca}`).join(', ')}
+                      </td>
+                      <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{formatDateBR(v.data_venda)}</td>
+                      <td className="px-3 py-1.5 text-right text-gray-700 whitespace-nowrap">{formatCurrencyBRL(totalV)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {ordens.length === 0 && vendas.length === 0 && (
+          <p className="text-sm text-gray-400 mb-4">Nenhuma OS ou venda vinculada a esta cobrança.</p>
+        )}
 
         <div className="flex justify-end mb-6">
           <div className="w-56 text-sm space-y-1">
-            <div className="flex justify-between text-gray-600">
-              <span>Total das OS ({ordens.length})</span>
-              <span>{formatCurrencyBRL(totalOS)}</span>
-            </div>
+            {ordens.length > 0 && (
+              <div className="flex justify-between text-gray-600">
+                <span>Total das OS ({ordens.length})</span>
+                <span>{formatCurrencyBRL(totalOS)}</span>
+              </div>
+            )}
+            {vendas.length > 0 && (
+              <div className="flex justify-between text-gray-600">
+                <span>Total das vendas ({vendas.length})</span>
+                <span>{formatCurrencyBRL(totalVendas)}</span>
+              </div>
+            )}
             <div className="flex justify-between font-bold text-gray-900 border-t border-gray-300 pt-1">
               <span>Total da cobrança</span>
               <span>{formatCurrencyBRL(lancamento.valor)}</span>
