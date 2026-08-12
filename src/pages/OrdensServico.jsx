@@ -52,6 +52,16 @@ const CONCLUIR_VAZIO = {
 }
 const OPCOES_REFERENCIA_GARANTIA = ['do serviço', 'da instalação', 'da peça', 'do equipamento', 'Outro...']
 
+// "1 anos" fica estranho — usa singular quando a quantidade é 1
+function unidadeGarantia(qtd, unidade) {
+  if (Number(qtd) === 1) {
+    if (unidade === 'anos') return 'ano'
+    if (unidade === 'meses') return 'mês'
+    if (unidade === 'dias') return 'dia'
+  }
+  return unidade
+}
+
 export default function OrdensServico() {
   const [lista, setLista] = useState([])
   const [equipamentos, setEquipamentos] = useState([])
@@ -787,7 +797,7 @@ export default function OrdensServico() {
                     {concluirForm.garantia_dias && (
                       <p className="text-xs text-green-700 mb-2">
                         No documento vai aparecer: "Garantia de {concluirForm.garantia_dias}{' '}
-                        {concluirForm.garantia_unidade}{' '}
+                        {unidadeGarantia(concluirForm.garantia_dias, concluirForm.garantia_unidade)}{' '}
                         {concluirForm.garantia_referencia === 'Outro...'
                           ? concluirForm.garantiaReferenciaCustom
                           : concluirForm.garantia_referencia}

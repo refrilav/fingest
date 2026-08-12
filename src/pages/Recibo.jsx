@@ -4,6 +4,16 @@ import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO } from '../lib/format'
 import { Printer, ArrowLeft } from 'lucide-react'
 
+// "1 anos" fica estranho — usa singular quando a quantidade é 1
+function unidadeGarantia(qtd, unidade) {
+  if (Number(qtd) === 1) {
+    if (unidade === 'anos') return 'ano'
+    if (unidade === 'meses') return 'mês'
+    if (unidade === 'dias') return 'dia'
+  }
+  return unidade
+}
+
 export default function Recibo() {
   const { id } = useParams() // id do lançamento
   const [lancamento, setLancamento] = useState(null)
@@ -281,7 +291,7 @@ export default function Recibo() {
 
         {mostrarGarantia && garantiaDias && (
           <p className="text-sm text-gray-700 mb-10">
-            <strong>Garantia:</strong> {garantiaDias} {garantiaUnidade} {garantiaReferencia}, a partir da conclusão do
+            <strong>Garantia:</strong> {garantiaDias} {unidadeGarantia(garantiaDias, garantiaUnidade)} {garantiaReferencia}, a partir da conclusão do
             serviço
             {lancamento.os?.data_conclusao
               ? ` (${formatDateBR(lancamento.os.data_conclusao)})`
