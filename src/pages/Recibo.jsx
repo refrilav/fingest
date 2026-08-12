@@ -8,6 +8,8 @@ export default function Recibo() {
   const { id } = useParams() // id do lançamento
   const [lancamento, setLancamento] = useState(null)
   const [garantiaDias, setGarantiaDias] = useState('')
+  const [garantiaUnidade, setGarantiaUnidade] = useState('dias')
+  const [garantiaReferencia, setGarantiaReferencia] = useState('do serviço')
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
 
@@ -34,7 +36,7 @@ export default function Recibo() {
         supabase
           .from('ordens_servico')
           .select(
-            'numero, garantia_dias, servicos_realizados, data_conclusao, valor_mao_de_obra, ordens_servico_pecas(nome_peca, quantidade, valor_unitario)'
+            'numero, garantia_dias, garantia_unidade, garantia_referencia, servicos_realizados, data_conclusao, valor_mao_de_obra, ordens_servico_pecas(nome_peca, quantidade, valor_unitario)'
           )
           .eq('lancamento_id', id)
           .maybeSingle(),
@@ -45,7 +47,11 @@ export default function Recibo() {
         return
       }
       setLancamento({ ...lancRes.data, os: osRes.data || null })
-      if (osRes.data?.garantia_dias) setGarantiaDias(String(osRes.data.garantia_dias))
+      if (osRes.data?.garantia_dias) {
+        setGarantiaDias(String(osRes.data.garantia_dias))
+        setGarantiaUnidade(osRes.data.garantia_unidade || 'dias')
+        setGarantiaReferencia(osRes.data.garantia_referencia || 'do serviço')
+      }
       setLoading(false)
       document.title = `Recibo - ${lancRes.data.clientes?.nome || lancRes.data.fornecedores?.nome || 'Refrilav'}`
     }
@@ -125,15 +131,33 @@ export default function Recibo() {
             </label>
           </div>
           {mostrarGarantia && (
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Garantia (dias)</label>
+            <div className="flex gap-2">
               <input
                 type="number"
                 value={garantiaDias}
                 onChange={(e) => setGarantiaDias(e.target.value)}
-                placeholder="Ex: 90"
-                className="w-40 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                placeholder="Ex: 1"
+                className="w-20 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
               />
+              <select
+                value={garantiaUnidade}
+                onChange={(e) => setGarantiaUnidade(e.target.value)}
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+              >
+                <option value="dias">dias</option>
+                <option value="meses">meses</option>
+                <option value="anos">anos</option>
+              </select>
+              <select
+                value={garantiaReferencia}
+                onChange={(e) => setGarantiaReferencia(e.target.value)}
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+              >
+                <option value="do serviço">do serviço</option>
+                <option value="da instalação">da instalação</option>
+                <option value="da peça">da peça</option>
+                <option value="do equipamento">do equipamento</option>
+              </select>
             </div>
           )}
         </div>
@@ -257,7 +281,8 @@ export default function Recibo() {
 
         {mostrarGarantia && garantiaDias && (
           <p className="text-sm text-gray-700 mb-10">
-            <strong>Garantia:</strong> {garantiaDias} dias a partir da conclusão do serviço
+            <strong>Garantia:</strong> {garantiaDias} {garantiaUnidade} {garantiaReferencia}, a partir da conclusão do
+            serviço
             {lancamento.os?.data_conclusao
               ? ` (${formatDateBR(lancamento.os.data_conclusao)})`
               : lancamento.data_pagamento

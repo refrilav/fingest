@@ -40,7 +40,17 @@ const CAMPOS_VAZIOS = {
   data_abertura: todayISO(),
 }
 
-const CONCLUIR_VAZIO = { categoria_id: '', valor_mao_de_obra: '', garantia_dias: '', modoValor: 'detalhado', valorFechado: '' }
+const CONCLUIR_VAZIO = {
+  categoria_id: '',
+  valor_mao_de_obra: '',
+  garantia_dias: '',
+  garantia_unidade: 'dias',
+  garantia_referencia: 'do serviço',
+  garantiaReferenciaCustom: '',
+  modoValor: 'detalhado',
+  valorFechado: '',
+}
+const OPCOES_REFERENCIA_GARANTIA = ['do serviço', 'da instalação', 'da peça', 'do equipamento', 'Outro...']
 
 export default function OrdensServico() {
   const [lista, setLista] = useState([])
@@ -270,6 +280,8 @@ export default function OrdensServico() {
       categoria_id: os.categoria_id || '',
       valor_mao_de_obra: os.valor_mao_de_obra != null ? String(os.valor_mao_de_obra) : '',
       garantia_dias: os.garantia_dias != null ? String(os.garantia_dias) : '',
+      garantia_unidade: os.garantia_unidade || 'dias',
+      garantia_referencia: os.garantia_referencia || 'do serviço',
       modoValor: 'detalhado',
       valorFechado: '',
     })
@@ -331,6 +343,11 @@ export default function OrdensServico() {
         valor_final: valorFinal,
         valor_mao_de_obra: maoDeObra,
         garantia_dias: concluirForm.garantia_dias ? Number(concluirForm.garantia_dias) : null,
+        garantia_unidade: concluirForm.garantia_unidade,
+        garantia_referencia:
+          concluirForm.garantia_referencia === 'Outro...'
+            ? concluirForm.garantiaReferenciaCustom || 'do serviço'
+            : concluirForm.garantia_referencia,
         categoria_id: concluirForm.categoria_id || null,
         lancamento_id: novoLancamento.id,
       })
@@ -729,14 +746,54 @@ export default function OrdensServico() {
                           setConcluirForm((f) => ({ ...f, categoria_id: nova.id }))
                         }}
                       />
-                      <input
-                        type="number"
-                        placeholder="Garantia (dias, opcional)"
-                        value={concluirForm.garantia_dias}
-                        onChange={(e) => setConcluirForm({ ...concluirForm, garantia_dias: e.target.value })}
-                        className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                      />
+                      <div className="col-span-1 sm:col-span-2 flex gap-2">
+                        <input
+                          type="number"
+                          placeholder="Garantia (opcional)"
+                          value={concluirForm.garantia_dias}
+                          onChange={(e) => setConcluirForm({ ...concluirForm, garantia_dias: e.target.value })}
+                          className="w-24 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        />
+                        <select
+                          value={concluirForm.garantia_unidade}
+                          onChange={(e) => setConcluirForm({ ...concluirForm, garantia_unidade: e.target.value })}
+                          className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                        >
+                          <option value="dias">dias</option>
+                          <option value="meses">meses</option>
+                          <option value="anos">anos</option>
+                        </select>
+                        <select
+                          value={concluirForm.garantia_referencia}
+                          onChange={(e) => setConcluirForm({ ...concluirForm, garantia_referencia: e.target.value })}
+                          className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                        >
+                          {OPCOES_REFERENCIA_GARANTIA.map((op) => (
+                            <option key={op} value={op}>{op}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {concluirForm.garantia_referencia === 'Outro...' && (
+                        <input
+                          type="text"
+                          placeholder='Ex: "do compressor"'
+                          value={concluirForm.garantiaReferenciaCustom}
+                          onChange={(e) => setConcluirForm({ ...concluirForm, garantiaReferenciaCustom: e.target.value })}
+                          className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        />
+                      )}
                     </div>
+
+                    {concluirForm.garantia_dias && (
+                      <p className="text-xs text-green-700 mb-2">
+                        No documento vai aparecer: "Garantia de {concluirForm.garantia_dias}{' '}
+                        {concluirForm.garantia_unidade}{' '}
+                        {concluirForm.garantia_referencia === 'Outro...'
+                          ? concluirForm.garantiaReferenciaCustom
+                          : concluirForm.garantia_referencia}
+                        , a partir da conclusão do serviço."
+                      </p>
+                    )}
 
                     {concluirForm.modoValor === 'detalhado' ? (
                       <p className="text-sm text-green-800 mb-2">

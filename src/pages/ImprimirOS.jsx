@@ -196,7 +196,8 @@ export default function ImprimirOS() {
 
         {mostrarGarantia && os.garantia_dias && (
           <p className="text-sm text-gray-700 mb-6">
-            <strong>Garantia:</strong> {os.garantia_dias} dias a partir da conclusão do serviço
+            <strong>Garantia:</strong> {os.garantia_dias} {os.garantia_unidade || 'dias'} {os.garantia_referencia || 'do serviço'},
+            a partir da conclusão do serviço
             {os.data_conclusao ? ` (${formatDateBR(os.data_conclusao)})` : ''}.
           </p>
         )}
