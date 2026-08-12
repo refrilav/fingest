@@ -27,6 +27,7 @@ import Cadastros from './pages/Cadastros'
 import ImprimirCobranca from './pages/ImprimirCobranca'
 import Vendas from './pages/Vendas'
 import VendasHub from './pages/VendasHub'
+import Compras from './pages/Compras'
 function RotaProtegida({ children }) {
   const { session, loading } = useAuth()
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">Carregando...</div>
@@ -87,6 +88,7 @@ function Rotas() {
         <Route path="vendas" element={<VendasHub />} />
         <Route path="vendas/pecas" element={<Vendas />} />
         <Route path="contas-a-pagar" element={<Lancamentos tipo="pagar" />} />
+        <Route path="compras" element={<Compras />} />
         <Route path="contas-a-receber" element={<Lancamentos tipo="receber" />} />
         <Route path="conciliacao" element={<Conciliacao />} />
         <Route path="relatorios" element={<Relatorios />} />

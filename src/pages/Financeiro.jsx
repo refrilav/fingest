@@ -8,10 +8,12 @@ import {
   SlidersHorizontal,
   Wallet,
   FileBarChart,
+  ShoppingCart,
 } from 'lucide-react'
 
 const CARDS = [
   { to: '/contas-a-pagar', label: 'Contas a Pagar', icon: ArrowUpCircle, color: 'bg-red-50 text-red-600' },
+  { to: '/compras', label: 'Compras', icon: ShoppingCart, color: 'bg-orange-50 text-orange-600' },
   { to: '/contas-a-receber', label: 'Contas a Receber', icon: ArrowDownCircle, color: 'bg-green-50 text-green-600' },
   { to: '/conciliacao', label: 'Conciliação Bancária', icon: Landmark, color: 'bg-blue-50 text-blue-600' },
   { to: '/transferencias', label: 'Transferências', icon: ArrowLeftRight, color: 'bg-purple-50 text-purple-600' },
