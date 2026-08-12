@@ -255,6 +255,7 @@ export default function Lancamentos({ tipo }) {
       taxaPercentual: '',
       tipoBaixa: 'total',
       valorParcial: '',
+      dataPagamento: todayISO(),
     })
   }
 
@@ -288,7 +289,7 @@ export default function Lancamentos({ tipo }) {
         valor_pago: valorPago,
         status: 'pago',
         data_vencimento: item.data_vencimento,
-        data_pagamento: todayISO(),
+        data_pagamento: pagamentoForm.dataPagamento || todayISO(),
         data_competencia: item.data_competencia,
         categoria_id: item.categoria_id,
         centro_custo_id: item.centro_custo_id,
@@ -320,7 +321,7 @@ export default function Lancamentos({ tipo }) {
         .update({
           status: 'pago',
           valor_pago: valorPago,
-          data_pagamento: todayISO(),
+          data_pagamento: pagamentoForm.dataPagamento || todayISO(),
           conta_bancaria_id: contaEscolhida,
           forma_pagamento: pagamentoForm.forma,
           desconto,
@@ -1009,6 +1010,15 @@ export default function Lancamentos({ tipo }) {
                             <option key={f} value={f}>{f}</option>
                           ))}
                         </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-green-800 mb-0.5">Data do pagamento</label>
+                        <input
+                          type="date"
+                          value={pagamentoForm.dataPagamento}
+                          onChange={(e) => setPagamentoForm({ ...pagamentoForm, dataPagamento: e.target.value })}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        />
                       </div>
 
                       {pagamentoForm.forma === 'Cartão de Crédito' && (
