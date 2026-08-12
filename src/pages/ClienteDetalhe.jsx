@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO } from '../lib/format'
-import { ArrowLeft, ClipboardList, Receipt, FileText, Phone, MapPin, DollarSign, Printer } from 'lucide-react'
+import { ArrowLeft, ClipboardList, Receipt, FileText, Phone, MapPin, DollarSign, Printer, X } from 'lucide-react'
 
 export default function ClienteDetalhe() {
   const { id } = useParams()
@@ -132,6 +132,39 @@ export default function ClienteDetalhe() {
     }
 
     setGerando(false)
+    carregar()
+  }
+
+  async function cancelarCobranca(lancamentoId) {
+    if (
+      !confirm(
+        'Cancelar esta cobrança? As OS\'s vinculadas voltam pra lista "aguardando cobrança" e você pode gerar uma nova depois.'
+      )
+    )
+      return
+
+    setErro(null)
+
+    const { error: erroOS } = await supabase
+      .from('ordens_servico')
+      .update({ lancamento_id: null })
+      .eq('lancamento_id', lancamentoId)
+
+    if (erroOS) {
+      setErro(erroOS.message)
+      return
+    }
+
+    const { error: erroLancamento } = await supabase
+      .from('lancamentos')
+      .update({ status: 'cancelado' })
+      .eq('id', lancamentoId)
+
+    if (erroLancamento) {
+      setErro(erroLancamento.message)
+      return
+    }
+
     carregar()
   }
 
@@ -276,6 +309,15 @@ export default function ClienteDetalhe() {
                   >
                     <Printer size={15} />
                   </Link>
+                )}
+                {lancamentosComOS.has(l.id) && l.status === 'aberto' && (
+                  <button
+                    onClick={() => cancelarCobranca(l.id)}
+                    title="Cancelar esta cobrança e liberar as OS's pra gerar de novo"
+                    className="text-gray-400 hover:text-red-600 p-1 rounded"
+                  >
+                    <X size={15} />
+                  </button>
                 )}
               </div>
             </li>

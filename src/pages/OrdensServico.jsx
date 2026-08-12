@@ -51,6 +51,7 @@ const CONCLUIR_VAZIO = {
   modoValor: 'detalhado',
   valorFechado: '',
   faturamento: 'agora', // 'agora' | 'acumular'
+  dataConclusao: todayISO(),
 }
 const OPCOES_REFERENCIA_GARANTIA = ['do serviço', 'da instalação', 'da peça', 'do equipamento', 'Outro...']
 
@@ -298,6 +299,7 @@ export default function OrdensServico() {
       modoValor: 'detalhado',
       valorFechado: '',
       faturamento: 'agora',
+      dataConclusao: os.data_conclusao || todayISO(),
     })
   }
 
@@ -319,8 +321,12 @@ export default function OrdensServico() {
       )
       return
     }
+    if (!concluirForm.dataConclusao) {
+      setErro('Informe a data de conclusão do serviço.')
+      return
+    }
 
-    const hoje = todayISO()
+    const dataConclusao = concluirForm.dataConclusao
     const nomeCliente = os.clientes?.nome || 'Cliente não identificado'
     const descricaoLancamento = `OS #${os.numero} — ${nomeCliente}`.substring(0, 250)
     const detalheValores = fechado
@@ -336,13 +342,13 @@ export default function OrdensServico() {
           tipo: 'receber',
           descricao: descricaoLancamento,
           valor: valorFinal,
-          data_vencimento: hoje,
-          data_competencia: hoje,
+          data_vencimento: dataConclusao,
+          data_competencia: dataConclusao,
           categoria_id: concluirForm.categoria_id || null,
           centro_custo_id: os.centro_custo_id || null,
           cliente_id: os.cliente_id || null,
           equipamento_id: os.equipamento_id || null,
-          observacoes: `Gerado automaticamente pela conclusão da OS #${os.numero}. ${detalheValores}`,
+          observacoes: `Gerado automaticamente pela conclusão da OS #${os.numero} (concluída em ${dataConclusao}). ${detalheValores}`,
         })
         .select()
         .single()
@@ -358,7 +364,7 @@ export default function OrdensServico() {
       .from('ordens_servico')
       .update({
         status: 'finalizada',
-        data_conclusao: hoje,
+        data_conclusao: dataConclusao,
         valor_final: valorFinal,
         valor_mao_de_obra: maoDeObra,
         garantia_dias: concluirForm.garantia_dias ? Number(concluirForm.garantia_dias) : null,
@@ -742,6 +748,16 @@ export default function OrdensServico() {
                       >
                         Valor fechado
                       </button>
+                    </div>
+
+                    <div className="mb-2">
+                      <label className="block text-[11px] text-green-800 mb-0.5">Data em que o serviço foi concluído</label>
+                      <input
+                        type="date"
+                        value={concluirForm.dataConclusao}
+                        onChange={(e) => setConcluirForm({ ...concluirForm, dataConclusao: e.target.value })}
+                        className="w-full sm:w-48 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                      />
                     </div>
 
                     <div className="flex gap-2 bg-white rounded-lg p-1 mb-2 border border-gray-200">
