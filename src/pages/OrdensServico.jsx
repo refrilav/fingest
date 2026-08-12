@@ -657,14 +657,14 @@ export default function OrdensServico() {
                     </div>
                     <div>
                       <label className="block text-[11px] text-gray-400 mb-0.5">Serviços realizados</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: troca do compressor, limpeza..."
+                      <textarea
+                        placeholder={'Ex: troca do compressor\nlimpeza dos filtros\n(um item por linha, se quiser)'}
                         defaultValue={os.servicos_realizados ?? ''}
+                        rows={3}
                         onBlur={(e) => {
                           if (e.target.value !== (os.servicos_realizados || '')) salvarServicosRealizados(os, e.target.value)
                         }}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm resize-y"
                       />
                     </div>
                   </div>

@@ -43,6 +43,8 @@ export default function Lancamentos({ tipo }) {
   const [busca, setBusca] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState('todas')
   const [pagandoId, setPagandoId] = useState(null)
+  const [renegociandoId, setRenegociandoId] = useState(null)
+  const [renegociarForm, setRenegociarForm] = useState({ quantidade: '2', dataPrimeira: todayISO() })
   const [contaEscolhida, setContaEscolhida] = useState('')
   const [pagamentoForm, setPagamentoForm] = useState({ forma: 'Pix', parcelas: '1', desconto: '', taxaPercentual: '' })
   const [editandoId, setEditandoId] = useState(null)
@@ -251,16 +253,18 @@ export default function Lancamentos({ tipo }) {
       parcelas: '1',
       desconto: '',
       taxaPercentual: '',
+      tipoBaixa: 'total',
+      valorParcial: '',
     })
   }
 
   function calcularValorPago(item) {
-    const valorBase = Number(item.valor)
+    const valorBase = pagamentoForm.tipoBaixa === 'parcial' ? Number(pagamentoForm.valorParcial) || 0 : Number(item.valor)
     const desconto = Number(pagamentoForm.desconto) || 0
-    const juros = Number(item.juros) || 0
+    const juros = pagamentoForm.tipoBaixa === 'parcial' ? 0 : Number(item.juros) || 0
     const ehCartao = pagamentoForm.forma === 'Cartão de Crédito' || pagamentoForm.forma === 'Cartão de Débito'
     const taxaValor = ehCartao ? valorBase * ((Number(pagamentoForm.taxaPercentual) || 0) / 100) : 0
-    return { valorPago: valorBase - desconto - taxaValor + juros, taxaValor, desconto, ehCartao }
+    return { valorBase, valorPago: valorBase - desconto - taxaValor + juros, taxaValor, desconto, ehCartao }
   }
 
   async function confirmarPagamento(item) {
@@ -268,27 +272,124 @@ export default function Lancamentos({ tipo }) {
       setErro('Selecione de qual conta saiu/entrou o valor.')
       return
     }
-    const { valorPago, taxaValor, desconto, ehCartao } = calcularValorPago(item)
+    const { valorBase, valorPago, taxaValor, desconto, ehCartao } = calcularValorPago(item)
 
-    const { error } = await supabase
-      .from('lancamentos')
-      .update({
-        status: 'pago',
+    if (pagamentoForm.tipoBaixa === 'parcial') {
+      if (!valorBase || valorBase <= 0 || valorBase >= Number(item.valor)) {
+        setErro('O valor parcial precisa ser maior que zero e menor que o valor total do lançamento.')
+        return
+      }
+
+      // 1. registra o valor recebido agora como um lançamento pago à parte
+      const { error: erroParcial } = await supabase.from('lancamentos').insert({
+        tipo,
+        descricao: `${item.descricao} (parcial)`,
+        valor: valorBase,
         valor_pago: valorPago,
+        status: 'pago',
+        data_vencimento: item.data_vencimento,
         data_pagamento: todayISO(),
+        data_competencia: item.data_competencia,
+        categoria_id: item.categoria_id,
+        centro_custo_id: item.centro_custo_id,
+        equipamento_id: item.equipamento_id,
+        [campoPessoa]: item[campoPessoa],
         conta_bancaria_id: contaEscolhida,
         forma_pagamento: pagamentoForm.forma,
         desconto,
         parcelas_cartao: pagamentoForm.forma === 'Cartão de Crédito' ? Number(pagamentoForm.parcelas) || 1 : null,
         taxa_cartao_percentual: ehCartao ? Number(pagamentoForm.taxaPercentual) || 0 : null,
         taxa_cartao_valor: ehCartao ? taxaValor : null,
+        observacoes: `Pagamento parcial referente a "${item.descricao}".`,
       })
-      .eq('id', item.id)
-    if (error) {
-      setErro(error.message)
-      return
+      if (erroParcial) {
+        setErro(erroParcial.message)
+        return
+      }
+
+      // 2. o lançamento original passa a representar só o saldo restante
+      const restante = Number((Number(item.valor) - valorBase).toFixed(2))
+      const { error: erroRestante } = await supabase.from('lancamentos').update({ valor: restante }).eq('id', item.id)
+      if (erroRestante) {
+        setErro(erroRestante.message)
+        return
+      }
+    } else {
+      const { error } = await supabase
+        .from('lancamentos')
+        .update({
+          status: 'pago',
+          valor_pago: valorPago,
+          data_pagamento: todayISO(),
+          conta_bancaria_id: contaEscolhida,
+          forma_pagamento: pagamentoForm.forma,
+          desconto,
+          parcelas_cartao: pagamentoForm.forma === 'Cartão de Crédito' ? Number(pagamentoForm.parcelas) || 1 : null,
+          taxa_cartao_percentual: ehCartao ? Number(pagamentoForm.taxaPercentual) || 0 : null,
+          taxa_cartao_valor: ehCartao ? taxaValor : null,
+        })
+        .eq('id', item.id)
+      if (error) {
+        setErro(error.message)
+        return
+      }
     }
     setPagandoId(null)
+    carregar()
+  }
+
+  function abrirRenegociacao(item) {
+    setRenegociandoId(item.id)
+    setRenegociarForm({ quantidade: '2', dataPrimeira: todayISO() })
+  }
+
+  async function confirmarRenegociacao(item) {
+    const totalParcelas = Math.max(2, Number(renegociarForm.quantidade) || 2)
+    const valorTotal = Number(item.valor)
+    const valorParcela = Math.floor((valorTotal / totalParcelas) * 100) / 100
+    const somaParcelas = valorParcela * (totalParcelas - 1)
+    const grupoId = crypto.randomUUID()
+
+    const linhas = []
+    for (let i = 0; i < totalParcelas; i++) {
+      const valorDaVez = i === totalParcelas - 1 ? Number((valorTotal - somaParcelas).toFixed(2)) : valorParcela
+      const vencimento = addMonthsISO(renegociarForm.dataPrimeira, i)
+      linhas.push({
+        tipo,
+        descricao: `${item.descricao} (renegociado ${i + 1}/${totalParcelas})`,
+        valor: valorDaVez,
+        data_vencimento: vencimento,
+        data_competencia: vencimento,
+        categoria_id: item.categoria_id,
+        centro_custo_id: item.centro_custo_id,
+        equipamento_id: item.equipamento_id,
+        [campoPessoa]: item[campoPessoa],
+        grupo_id: grupoId,
+        numero_parcela: i + 1,
+        total_parcelas: totalParcelas,
+        observacoes: `Renegociação do lançamento original: "${item.descricao}".`,
+      })
+    }
+
+    const { error: erroInsert } = await supabase.from('lancamentos').insert(linhas)
+    if (erroInsert) {
+      setErro(erroInsert.message)
+      return
+    }
+
+    const { error: erroOriginal } = await supabase
+      .from('lancamentos')
+      .update({
+        status: 'cancelado',
+        observacoes: `${item.observacoes ? item.observacoes + ' ' : ''}Renegociado em ${totalParcelas}x.`,
+      })
+      .eq('id', item.id)
+    if (erroOriginal) {
+      setErro(erroOriginal.message)
+      return
+    }
+
+    setRenegociandoId(null)
     carregar()
   }
 
@@ -807,6 +908,15 @@ export default function Lancamentos({ tipo }) {
                         <X size={16} />
                       </button>
                     )}
+                    {item.status === 'aberto' && (
+                      <button
+                        onClick={() => abrirRenegociacao(item)}
+                        title="Renegociar em mais vezes"
+                        className="text-gray-400 hover:text-blue-600 p-1 rounded"
+                      >
+                        <Repeat size={16} />
+                      </button>
+                    )}
                     {tipo === 'receber' && item.status === 'pago' && (
                       <Link
                         to={`/recibo/${item.id}`}
@@ -831,6 +941,47 @@ export default function Lancamentos({ tipo }) {
 
                 {pagandoId === item.id && (
                   <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3">
+                    <div className="flex gap-2 bg-white rounded-lg p-1 mb-2 border border-gray-200">
+                      <button
+                        type="button"
+                        onClick={() => setPagamentoForm({ ...pagamentoForm, tipoBaixa: 'total' })}
+                        className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${
+                          pagamentoForm.tipoBaixa === 'total' ? 'bg-green-600 text-white' : 'text-gray-500'
+                        }`}
+                      >
+                        Pagamento total
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPagamentoForm({ ...pagamentoForm, tipoBaixa: 'parcial' })}
+                        className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${
+                          pagamentoForm.tipoBaixa === 'parcial' ? 'bg-green-600 text-white' : 'text-gray-500'
+                        }`}
+                      >
+                        Pagamento parcial
+                      </button>
+                    </div>
+
+                    {pagamentoForm.tipoBaixa === 'parcial' && (
+                      <div className="mb-2">
+                        <label className="block text-[11px] text-green-800 mb-0.5">
+                          Valor recebido agora (de {formatCurrencyBRL(item.valor)})
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="Valor parcial"
+                          value={pagamentoForm.valorParcial}
+                          onChange={(e) => setPagamentoForm({ ...pagamentoForm, valorParcial: e.target.value })}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        />
+                        <p className="text-[11px] text-green-700 mt-0.5">
+                          O restante ({formatCurrencyBRL(Math.max(0, Number(item.valor) - (Number(pagamentoForm.valorParcial) || 0)))})
+                          continua em aberto — dá pra dar baixa nele depois, ou usar "Renegociar em mais vezes".
+                        </p>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
                       <div>
                         <label className="block text-[11px] text-green-800 mb-0.5">
@@ -902,7 +1053,7 @@ export default function Lancamentos({ tipo }) {
                     </div>
 
                     <p className="text-xs text-green-800 mb-2">
-                      Valor líquido a {tipo === 'pagar' ? 'pagar' : 'receber'}:{' '}
+                      {pagamentoForm.tipoBaixa === 'parcial' ? 'Valor líquido recebido agora' : `Valor líquido a ${tipo === 'pagar' ? 'pagar' : 'receber'}`}:{' '}
                       <strong>{formatCurrencyBRL(calcularValorPago(item).valorPago)}</strong>
                       {calcularValorPago(item).taxaValor > 0 && (
                         <span className="text-green-600"> (taxa de {formatCurrencyBRL(calcularValorPago(item).taxaValor)} já descontada)</span>
@@ -923,6 +1074,54 @@ export default function Lancamentos({ tipo }) {
                         className="flex items-center gap-1 rounded-lg bg-green-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-green-700"
                       >
                         <CheckCircle2 size={14} /> Confirmar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {renegociandoId === item.id && (
+                  <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-xs text-blue-800 mb-2">
+                      Divide o valor de <strong>{formatCurrencyBRL(item.valor)}</strong> em novas parcelas mensais. O
+                      lançamento original é cancelado e substituído pelas novas parcelas.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                      <div>
+                        <label className="block text-[11px] text-blue-800 mb-0.5">Em quantas vezes</label>
+                        <input
+                          type="number"
+                          min="2"
+                          max="60"
+                          value={renegociarForm.quantidade}
+                          onChange={(e) => setRenegociarForm({ ...renegociarForm, quantidade: e.target.value })}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-blue-800 mb-0.5">Vencimento da 1ª parcela</label>
+                        <input
+                          type="date"
+                          value={renegociarForm.dataPrimeira}
+                          onChange={(e) => setRenegociarForm({ ...renegociarForm, dataPrimeira: e.target.value })}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-blue-800 mb-2">
+                      Cada parcela:{' '}
+                      <strong>
+                        {formatCurrencyBRL(Number(item.valor) / Math.max(2, Number(renegociarForm.quantidade) || 2))}
+                      </strong>
+                    </p>
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => setRenegociandoId(null)} className="px-3 py-1.5 text-sm text-gray-500">
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() => confirmarRenegociacao(item)}
+                        className="flex items-center gap-1 rounded-lg bg-blue-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-blue-700"
+                      >
+                        <Repeat size={14} /> Confirmar renegociação
                       </button>
                     </div>
                   </div>
