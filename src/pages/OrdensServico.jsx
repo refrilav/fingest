@@ -19,6 +19,7 @@ import {
   Receipt,
   ChevronDown,
   ChevronUp,
+  FileBarChart,
 } from 'lucide-react'
 
 const STATUS_ATUAL_OPCOES = [
@@ -500,18 +501,26 @@ export default function OrdensServico() {
     <div className="max-w-4xl">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 gap-2">
         <h2 className="text-2xl font-bold text-gray-900">Ordens de Serviço</h2>
-        <button
-          onClick={() => {
-            if (mostrarForm) cancelarFormulario()
-            else {
-              setForm(CAMPOS_VAZIOS)
-              setMostrarForm(true)
-            }
-          }}
-          className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700"
-        >
-          <Plus size={16} /> Nova OS
-        </button>
+        <div className="flex gap-2">
+          <Link
+            to="/ordens-servico/relatorio"
+            className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-200"
+          >
+            <FileBarChart size={16} /> Relatório
+          </Link>
+          <button
+            onClick={() => {
+              if (mostrarForm) cancelarFormulario()
+              else {
+                setForm(CAMPOS_VAZIOS)
+                setMostrarForm(true)
+              }
+            }}
+            className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700"
+          >
+            <Plus size={16} /> Nova OS
+          </button>
+        </div>
       </div>
       <p className="text-gray-500 text-sm mb-4">
         Valor, peças e garantia são definidos só na conclusão — na abertura ainda não se sabe.
