@@ -1109,6 +1109,14 @@ export default function OrdensServico() {
                       <Receipt size={13} /> Recibo
                     </Link>
                   )}
+                  {os.status === 'finalizada' && (
+                    <Link
+                      to={`/ordens-servico/${os.id}/laudo`}
+                      className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-500 px-3 py-1.5 text-xs hover:bg-gray-200"
+                    >
+                      <FileBarChart size={13} /> Laudo
+                    </Link>
+                  )}
                   <button
                     onClick={() => excluir(os.id)}
                     className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-500 px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-600 ml-auto"

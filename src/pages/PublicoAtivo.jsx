@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatDateBR } from '../lib/format'
-import { Wrench, Calendar, User } from 'lucide-react'
+import { Wrench, Calendar, User, FileText } from 'lucide-react'
 
 // Soma meses a uma data 'YYYY-MM-DD' sem usar new Date() pra exibir (convenção do projeto)
 function somarMeses(dataISO, meses) {
@@ -17,19 +17,21 @@ export default function PublicoAtivo() {
   const { id } = useParams()
   const [ativo, setAtivo] = useState(null)
   const [historico, setHistorico] = useState([])
+  const [laudosPorOS, setLaudosPorOS] = useState({})
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
 
   useEffect(() => {
     async function carregar() {
       setLoading(true)
-      const [ativoRes, histRes] = await Promise.all([
+      const [ativoRes, histRes, laudosRes] = await Promise.all([
         supabase.from('ativos').select('codigo, local, modelo, intervalo_meses, equipamentos(nome)').eq('id', id).single(),
         supabase
           .from('historico_ativo_publico')
           .select('*')
           .eq('ativo_id', id)
           .order('data_conclusao', { ascending: false }),
+        supabase.from('laudos').select('id, ordem_servico_id').eq('ativo_id', id),
       ])
       if (ativoRes.error) {
         setErro('Não encontramos esse equipamento.')
@@ -38,6 +40,9 @@ export default function PublicoAtivo() {
       }
       setAtivo(ativoRes.data)
       setHistorico(histRes.data || [])
+      setLaudosPorOS(
+        Object.fromEntries((laudosRes.data || []).map((l) => [l.ordem_servico_id, l.id]))
+      )
       setLoading(false)
     }
     carregar()
@@ -97,6 +102,14 @@ export default function PublicoAtivo() {
                   <p className="flex items-center gap-1.5 text-xs text-gray-500 mt-1.5">
                     <User size={12} className="text-gray-400" /> {h.tecnico}
                   </p>
+                )}
+                {laudosPorOS[h.os_id] && (
+                  <Link
+                    to={`/laudo/${laudosPorOS[h.os_id]}/imprimir`}
+                    className="flex items-center gap-1.5 text-xs text-primary-700 hover:underline mt-2"
+                  >
+                    <FileText size={12} /> Ver laudo de manutenção
+                  </Link>
                 )}
               </li>
             ))}

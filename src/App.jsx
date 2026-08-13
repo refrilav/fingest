@@ -33,6 +33,8 @@ import RelatorioFinanceiro from './pages/RelatorioFinanceiro'
 import AtivosCliente from './pages/AtivosCliente'
 import ImprimirQRCodes from './pages/ImprimirQRCodes'
 import PublicoAtivo from './pages/PublicoAtivo'
+import GerarLaudo from './pages/GerarLaudo'
+import ImprimirLaudo from './pages/ImprimirLaudo'
 function RotaProtegida({ children }) {
   const { session, loading } = useAuth()
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">Carregando...</div>
@@ -85,6 +87,15 @@ function Rotas() {
         }
       />
       <Route path="/publico/ativo/:id" element={<PublicoAtivo />} />
+      <Route path="/laudo/:id/imprimir" element={<ImprimirLaudo />} />
+      <Route
+        path="/ordens-servico/:osId/laudo"
+        element={
+          <RotaProtegida>
+            <GerarLaudo />
+          </RotaProtegida>
+        }
+      />
       <Route
         path="/financeiro/relatorio"
         element={
