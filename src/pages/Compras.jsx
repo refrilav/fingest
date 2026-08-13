@@ -197,13 +197,6 @@ export default function Compras() {
       setErro('Preencha data e valor de todas as parcelas.')
       return
     }
-    if (entraEstoque) {
-      const semValorVenda = itens.find((i) => !i.valorVenda || Number(i.valorVenda) <= 0)
-      if (semValorVenda) {
-        setErro(`Falta o valor de venda de "${semValorVenda.descricao}".`)
-        return
-      }
-    }
 
     setSalvando(true)
     setErro(null)
@@ -235,22 +228,23 @@ export default function Compras() {
 
       if (entraEstoque) {
         if (pecaId) {
-          const { data: pecaAtual } = await supabase.from('pecas').select('quantidade_estoque').eq('id', pecaId).single()
-          await supabase
-            .from('pecas')
-            .update({
-              quantidade_estoque: Number(pecaAtual?.quantidade_estoque || 0) + Number(item.quantidade),
-              valor_custo: Number(item.valorUnitario),
-              valor_venda: Number(item.valorVenda),
-            })
-            .eq('id', pecaId)
+          const { data: pecaAtual } = await supabase.from('pecas').select('quantidade_estoque, valor_venda').eq('id', pecaId).single()
+          const payloadPeca = {
+            quantidade_estoque: Number(pecaAtual?.quantidade_estoque || 0) + Number(item.quantidade),
+            valor_custo: Number(item.valorUnitario),
+          }
+          // só atualiza o valor de venda se ela realmente preencheu — senão mantém o preço já cadastrado
+          if (item.valorVenda && Number(item.valorVenda) > 0) {
+            payloadPeca.valor_venda = Number(item.valorVenda)
+          }
+          await supabase.from('pecas').update(payloadPeca).eq('id', pecaId)
         } else {
           const { data: novaPeca, error: erroPeca } = await supabase
             .from('pecas')
             .insert({
               nome: item.descricao,
               valor_custo: Number(item.valorUnitario),
-              valor_venda: Number(item.valorVenda),
+              valor_venda: item.valorVenda ? Number(item.valorVenda) : 0,
               quantidade_estoque: Number(item.quantidade),
             })
             .select()
@@ -425,7 +419,7 @@ export default function Compras() {
                     <input
                       type="number"
                       step="0.01"
-                      placeholder="Valor de venda desse item *"
+                      placeholder="Valor de venda (opcional — dá pra ajustar depois no Estoque)"
                       value={item.valorVenda}
                       onChange={(e) => atualizarItem(i, 'valorVenda', e.target.value)}
                       className="w-full sm:w-56 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
