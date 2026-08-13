@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO, isOverdue, addMonthsISO, getRangeMes, mesAtualISO } from '../lib/format'
-import { Plus, Trash2, CheckCircle2, X, Repeat, Pencil, Download, Search, BarChart3, Receipt } from 'lucide-react'
+import { Plus, Trash2, CheckCircle2, X, Repeat, Pencil, Download, Search, BarChart3, Receipt, FileSearch } from 'lucide-react'
 import BuscaPessoa from '../components/BuscaPessoa'
 import SelectCategoria from '../components/SelectCategoria'
 
@@ -553,6 +553,12 @@ export default function Lancamentos({ tipo }) {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 gap-2">
         <h2 className="text-2xl font-bold text-gray-900">{titulo}</h2>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Link
+            to={`/financeiro/relatorio?tipo=${tipo}`}
+            className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-200"
+          >
+            <FileSearch size={16} /> Relatório
+          </Link>
           <button
             onClick={exportarExcel}
             className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-200"

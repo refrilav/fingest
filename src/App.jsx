@@ -29,6 +29,7 @@ import Vendas from './pages/Vendas'
 import VendasHub from './pages/VendasHub'
 import Compras from './pages/Compras'
 import RelatorioOS from './pages/RelatorioOS'
+import RelatorioFinanceiro from './pages/RelatorioFinanceiro'
 function RotaProtegida({ children }) {
   const { session, loading } = useAuth()
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">Carregando...</div>
@@ -77,6 +78,14 @@ function Rotas() {
         element={
           <RotaProtegida>
             <RelatorioOS />
+          </RotaProtegida>
+        }
+      />
+      <Route
+        path="/financeiro/relatorio"
+        element={
+          <RotaProtegida>
+            <RelatorioFinanceiro />
           </RotaProtegida>
         }
       />

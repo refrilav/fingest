@@ -9,6 +9,7 @@ import {
   Wallet,
   FileBarChart,
   ShoppingCart,
+  FileSearch,
 } from 'lucide-react'
 
 const CARDS = [
@@ -21,6 +22,7 @@ const CARDS = [
   { to: '/contas-bancarias', label: 'Contas Bancárias', icon: Wallet, color: 'bg-gray-100 text-gray-600' },
   { to: '/relatorios', label: 'Relatórios / DRE', icon: FileBarChart, color: 'bg-indigo-50 text-indigo-600' },
   { to: '/fluxo-caixa', label: 'Fluxo de Caixa', icon: Wallet, color: 'bg-teal-50 text-teal-600' },
+  { to: '/financeiro/relatorio', label: 'Relatório Financeiro', icon: FileSearch, color: 'bg-cyan-50 text-cyan-600' },
 ]
 
 export default function Financeiro() {
