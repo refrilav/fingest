@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 
 const STATUS_ATUAL_OPCOES = [
+  'Agendado',
   'Recolhida para oficina',
   'Peça encomendada',
   'Aguardando aprovação do orçamento',
@@ -29,6 +30,15 @@ const STATUS_ATUAL_OPCOES = [
   'Em atendimento no local',
   'Outro...',
 ]
+
+// "2026-01-15T14:30" -> "15/01 14:30"
+function formatDataHora(str) {
+  if (!str) return ''
+  const [data, hora] = str.split('T')
+  if (!data) return str
+  const [, mes, dia] = data.split('-')
+  return `${dia}/${mes}${hora ? ` ${hora.substring(0, 5)}` : ''}`
+}
 
 const CAMPOS_VAZIOS = {
   cliente_id: '',
@@ -81,7 +91,7 @@ export default function OrdensServico() {
   const [filtroStatus, setFiltroStatus] = useState('abertas')
 
   const [editandoStatusId, setEditandoStatusId] = useState(null)
-  const [statusAtualForm, setStatusAtualForm] = useState({ opcao: STATUS_ATUAL_OPCOES[0], texto: '' })
+  const [statusAtualForm, setStatusAtualForm] = useState({ opcao: STATUS_ATUAL_OPCOES[0], texto: '', dataAgendamento: '' })
 
   const [concluindoId, setConcluindoId] = useState(null)
   const [concluirForm, setConcluirForm] = useState(CONCLUIR_VAZIO)
@@ -209,12 +219,19 @@ export default function OrdensServico() {
     setStatusAtualForm({
       opcao: jaEhOpcaoPadrao ? os.status_atual : os.status_atual ? 'Outro...' : STATUS_ATUAL_OPCOES[0],
       texto: jaEhOpcaoPadrao ? '' : os.status_atual || '',
+      dataAgendamento: os.data_agendamento || '',
     })
   }
 
   async function salvarStatusAtual(osId) {
     const valor = statusAtualForm.opcao === 'Outro...' ? statusAtualForm.texto.trim() : statusAtualForm.opcao
-    const { error } = await supabase.from('ordens_servico').update({ status_atual: valor || null }).eq('id', osId)
+    const { error } = await supabase
+      .from('ordens_servico')
+      .update({
+        status_atual: valor || null,
+        data_agendamento: statusAtualForm.opcao === 'Agendado' ? statusAtualForm.dataAgendamento || null : null,
+      })
+      .eq('id', osId)
     if (error) {
       setErro(error.message)
       return
@@ -454,7 +471,13 @@ export default function OrdensServico() {
       if (ib === -1) return -1
       return ia - ib
     })
-    return chaves.map((chave) => ({ titulo: chave, itens: grupos[chave] }))
+    return chaves.map((chave) => ({
+      titulo: chave,
+      itens:
+        chave === 'Agendado'
+          ? [...grupos[chave]].sort((a, b) => (a.data_agendamento || '').localeCompare(b.data_agendamento || ''))
+          : grupos[chave],
+    }))
   }
 
   let grupos
@@ -649,6 +672,9 @@ export default function OrdensServico() {
                         {os.status === 'em_andamento' && os.status_atual && (
                           <span className="flex items-center gap-1 text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">
                             <Wrench size={11} /> {os.status_atual}
+                            {os.status_atual === 'Agendado' && os.data_agendamento
+                              ? ` · ${formatDataHora(os.data_agendamento)}`
+                              : ''}
                           </span>
                         )}
                       </div>
@@ -709,6 +735,14 @@ export default function OrdensServico() {
                             onChange={(e) => setStatusAtualForm({ ...statusAtualForm, texto: e.target.value })}
                             placeholder="Descreva o status..."
                             className="rounded-lg border border-gray-300 px-2 py-1 text-xs flex-1 min-w-[140px]"
+                          />
+                        )}
+                        {statusAtualForm.opcao === 'Agendado' && (
+                          <input
+                            type="datetime-local"
+                            value={statusAtualForm.dataAgendamento}
+                            onChange={(e) => setStatusAtualForm({ ...statusAtualForm, dataAgendamento: e.target.value })}
+                            className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
                           />
                         )}
                         <button
