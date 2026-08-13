@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO } from '../lib/format'
 import BuscaPessoa from '../components/BuscaPessoa'
 import BuscaPeca from '../components/BuscaPeca'
+import BuscaAtivo from '../components/BuscaAtivo'
 import SelectCategoria from '../components/SelectCategoria'
 import {
   Plus,
@@ -44,6 +45,7 @@ function formatDataHora(str) {
 const CAMPOS_VAZIOS = {
   cliente_id: '',
   equipamento_id: '',
+  ativo_id: '',
   categoria_id: '',
   centro_custo_id: '',
   descricao_problema: '',
@@ -66,6 +68,7 @@ const CONCLUIR_VAZIO = {
   valorFechado: '',
   faturamento: 'agora', // 'agora' | 'acumular'
   dataConclusao: todayISO(),
+  tecnico: '',
 }
 const OPCOES_REFERENCIA_GARANTIA = ['do serviço', 'da instalação', 'da peça', 'do equipamento', 'Outro...']
 
@@ -154,6 +157,7 @@ export default function OrdensServico() {
       observacoes: form.observacoes || null,
       data_abertura: form.data_abertura,
       cliente_final: form.cliente_final || null,
+      ativo_id: form.ativo_id || null,
     }
 
     // Se a OS já está finalizada, permite corrigir a data de conclusão também
@@ -186,6 +190,7 @@ export default function OrdensServico() {
       observacoes: os.observacoes || '',
       data_abertura: os.data_abertura,
       cliente_final: os.cliente_final || '',
+      ativo_id: os.ativo_id || '',
       data_conclusao_edicao: os.data_conclusao || '',
     })
     setEditandoId(os.id)
@@ -339,6 +344,7 @@ export default function OrdensServico() {
       valorFechado: '',
       faturamento: 'agora',
       dataConclusao: os.data_conclusao || todayISO(),
+      tecnico: os.tecnico || '',
     })
   }
 
@@ -414,6 +420,7 @@ export default function OrdensServico() {
             : concluirForm.garantia_referencia,
         categoria_id: concluirForm.categoria_id || null,
         lancamento_id: lancamentoId,
+        tecnico: concluirForm.tecnico || null,
       })
       .eq('id', os.id)
 
@@ -554,6 +561,13 @@ export default function OrdensServico() {
             value={form.cliente_final}
             onChange={(e) => setForm({ ...form, cliente_final: e.target.value })}
             className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          />
+
+          <BuscaAtivo
+            clienteId={form.cliente_id}
+            value={form.ativo_id}
+            onChange={(id) => setForm({ ...form, ativo_id: id })}
+            placeholder="Equipamento específico (opcional — pra controle por QR code)..."
           />
 
           {editandoOSFinalizada && (
@@ -890,14 +904,26 @@ export default function OrdensServico() {
                       </button>
                     </div>
 
-                    <div className="mb-2">
-                      <label className="block text-[11px] text-green-800 mb-0.5">Data em que o serviço foi concluído</label>
-                      <input
-                        type="date"
-                        value={concluirForm.dataConclusao}
-                        onChange={(e) => setConcluirForm({ ...concluirForm, dataConclusao: e.target.value })}
-                        className="w-full sm:w-48 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                      />
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      <div>
+                        <label className="block text-[11px] text-green-800 mb-0.5">Data em que o serviço foi concluído</label>
+                        <input
+                          type="date"
+                          value={concluirForm.dataConclusao}
+                          onChange={(e) => setConcluirForm({ ...concluirForm, dataConclusao: e.target.value })}
+                          className="w-full sm:w-48 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-green-800 mb-0.5">Técnico responsável (opcional)</label>
+                        <input
+                          type="text"
+                          value={concluirForm.tecnico}
+                          onChange={(e) => setConcluirForm({ ...concluirForm, tecnico: e.target.value })}
+                          placeholder="Ex: Diego"
+                          className="w-full sm:w-48 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        />
+                      </div>
                     </div>
 
                     <div className="flex gap-2 bg-white rounded-lg p-1 mb-2 border border-gray-200">

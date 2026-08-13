@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO } from '../lib/format'
-import { ArrowLeft, ClipboardList, Receipt, FileText, Phone, MapPin, DollarSign, Printer, X, Package } from 'lucide-react'
+import { ArrowLeft, ClipboardList, Receipt, FileText, Phone, MapPin, DollarSign, Printer, X, Package, QrCode } from 'lucide-react'
 
 export default function ClienteDetalhe() {
   const { id } = useParams()
@@ -240,6 +240,12 @@ export default function ClienteDetalhe() {
           )}
           {cliente.documento && <span>{cliente.documento}</span>}
         </div>
+        <Link
+          to={`/clientes/${id}/ativos`}
+          className="inline-flex items-center gap-1.5 mt-3 text-sm text-primary-700 hover:underline"
+        >
+          <QrCode size={15} /> Equipamentos com QR Code
+        </Link>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">

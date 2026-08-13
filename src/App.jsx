@@ -30,6 +30,9 @@ import VendasHub from './pages/VendasHub'
 import Compras from './pages/Compras'
 import RelatorioOS from './pages/RelatorioOS'
 import RelatorioFinanceiro from './pages/RelatorioFinanceiro'
+import AtivosCliente from './pages/AtivosCliente'
+import ImprimirQRCodes from './pages/ImprimirQRCodes'
+import PublicoAtivo from './pages/PublicoAtivo'
 function RotaProtegida({ children }) {
   const { session, loading } = useAuth()
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">Carregando...</div>
@@ -81,11 +84,20 @@ function Rotas() {
           </RotaProtegida>
         }
       />
+      <Route path="/publico/ativo/:id" element={<PublicoAtivo />} />
       <Route
         path="/financeiro/relatorio"
         element={
           <RotaProtegida>
             <RelatorioFinanceiro />
+          </RotaProtegida>
+        }
+      />
+      <Route
+        path="/clientes/:clienteId/ativos/qrcodes"
+        element={
+          <RotaProtegida>
+            <ImprimirQRCodes />
           </RotaProtegida>
         }
       />
@@ -115,6 +127,7 @@ function Rotas() {
         <Route path="fornecedores" element={<Fornecedores />} />
         <Route path="clientes" element={<Clientes />} />
         <Route path="clientes/:id" element={<ClienteDetalhe />} />
+        <Route path="clientes/:clienteId/ativos" element={<AtivosCliente />} />
         <Route path="clientes/importar" element={<ImportarPessoas tipo="clientes" />} />
         <Route path="fornecedores/importar" element={<ImportarPessoas tipo="fornecedores" />} />
         <Route path="contas-bancarias" element={<ContasBancarias />} />
