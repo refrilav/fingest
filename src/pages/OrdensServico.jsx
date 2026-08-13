@@ -17,6 +17,8 @@ import {
   Package,
   Printer,
   Receipt,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 
 const STATUS_ATUAL_OPCOES = [
@@ -83,6 +85,17 @@ export default function OrdensServico() {
 
   const [concluindoId, setConcluindoId] = useState(null)
   const [concluirForm, setConcluirForm] = useState(CONCLUIR_VAZIO)
+  const [expandidoId, setExpandidoId] = useState(null)
+
+  function alternarExpandido(osId) {
+    if (expandidoId === osId) {
+      setExpandidoId(null)
+    } else {
+      setExpandidoId(osId)
+      setEditandoStatusId(null)
+      setConcluindoId(null)
+    }
+  }
 
   async function carregar() {
     setLoading(true)
@@ -421,6 +434,42 @@ export default function OrdensServico() {
     return os.status === filtroStatus
   })
 
+  // Agrupa as OS's "em andamento" pelo status atual (Recolhida para oficina, Peça encomendada...)
+  // pra não ficar tudo misturado quando tiver muitas nesse status.
+  function agruparPorStatusAtual(itens) {
+    const ordemBase = STATUS_ATUAL_OPCOES.slice(0, -1) // sem "Outro..."
+    const grupos = {}
+    for (const os of itens) {
+      const chave = os.status_atual || 'Sem status definido'
+      if (!grupos[chave]) grupos[chave] = []
+      grupos[chave].push(os)
+    }
+    const chaves = Object.keys(grupos).sort((a, b) => {
+      if (a === 'Sem status definido') return 1
+      if (b === 'Sem status definido') return -1
+      const ia = ordemBase.indexOf(a)
+      const ib = ordemBase.indexOf(b)
+      if (ia === -1 && ib === -1) return a.localeCompare(b)
+      if (ia === -1) return 1
+      if (ib === -1) return -1
+      return ia - ib
+    })
+    return chaves.map((chave) => ({ titulo: chave, itens: grupos[chave] }))
+  }
+
+  let grupos
+  if (filtroStatus === 'em_andamento') {
+    grupos = agruparPorStatusAtual(listaFiltrada)
+  } else if (filtroStatus === 'abertas') {
+    const naoIniciadas = listaFiltrada.filter((o) => o.status === 'nao_iniciada')
+    const emAndamento = listaFiltrada.filter((o) => o.status === 'em_andamento')
+    grupos = []
+    if (naoIniciadas.length > 0) grupos.push({ titulo: 'Não iniciadas', itens: naoIniciadas })
+    grupos.push(...agruparPorStatusAtual(emAndamento))
+  } else {
+    grupos = [{ titulo: null, itens: listaFiltrada }]
+  }
+
   const itemEditando = editandoId ? lista.find((o) => o.id === editandoId) : null
   const editandoOSFinalizada = itemEditando?.status === 'finalizada'
 
@@ -575,47 +624,72 @@ export default function OrdensServico() {
           <p className="text-sm">Nenhuma OS encontrada nesse filtro.</p>
         </div>
       ) : (
-        <ul className="space-y-3">
-          {listaFiltrada.map((os) => {
-            const totalPecas = totalPecasDaOS(os)
-            return (
-              <li key={os.id} className="bg-white border border-gray-200 rounded-lg p-4">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-mono text-gray-400">OS #{os.numero}</span>
-                      <StatusBadge status={os.status} />
+        <div className="space-y-6">
+          {grupos.map((grupo, gi) => (
+            <div key={grupo.titulo || `grupo-${gi}`}>
+              {grupo.titulo && (
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  {grupo.titulo} <span className="font-normal normal-case text-gray-400">({grupo.itens.length})</span>
+                </p>
+              )}
+              <ul className="space-y-3">
+                {grupo.itens.map((os) => {
+                  const totalPecas = totalPecasDaOS(os)
+                  return (
+              <li key={os.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => alternarExpandido(os.id)}
+                  className="w-full text-left p-4 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-mono text-gray-400">OS #{os.numero}</span>
+                        <StatusBadge status={os.status} />
+                        {os.status === 'em_andamento' && os.status_atual && (
+                          <span className="flex items-center gap-1 text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">
+                            <Wrench size={11} /> {os.status_atual}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm font-medium text-gray-800 mt-1">
+                        {os.clientes?.nome || '(Sem cliente)'}
+                        {os.clientes?.telefone ? ` · ${os.clientes.telefone}` : ''}
+                        {os.equipamentos?.nome ? ` · ${os.equipamentos.nome}` : ''}
+                      </p>
+                      {os.cliente_final && (
+                        <p className="text-xs text-blue-600">Cliente final: {os.cliente_final}</p>
+                      )}
+                      <p className="text-sm text-gray-600 mt-0.5 whitespace-pre-wrap">{os.descricao_problema}</p>
+                      {os.status === 'finalizada' && os.servicos_realizados && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          <span className="font-medium text-gray-600">Serviços realizados:</span> {os.servicos_realizados}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-400 mt-1">
+                        Aberta em {formatDateBR(os.data_abertura)}
+                        {os.endereco ? ` · ${os.endereco}` : ''}
+                        {os.garantia_dias ? ` · Garantia: ${os.garantia_dias} dias` : ''}
+                      </p>
                     </div>
-                    <p className="text-sm font-medium text-gray-800 mt-1">
-                      {os.clientes?.nome || '(Sem cliente)'}
-                      {os.clientes?.telefone ? ` · ${os.clientes.telefone}` : ''}
-                      {os.equipamentos?.nome ? ` · ${os.equipamentos.nome}` : ''}
-                    </p>
-                    {os.cliente_final && (
-                      <p className="text-xs text-blue-600">Cliente final: {os.cliente_final}</p>
-                    )}
-                    <p className="text-sm text-gray-600 mt-0.5 whitespace-pre-wrap">{os.descricao_problema}</p>
-                    {os.status === 'finalizada' && os.servicos_realizados && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        <span className="font-medium text-gray-600">Serviços realizados:</span> {os.servicos_realizados}
-                      </p>
-                    )}
-                    <p className="text-xs text-gray-400 mt-1">
-                      Aberta em {formatDateBR(os.data_abertura)}
-                      {os.endereco ? ` · ${os.endereco}` : ''}
-                      {os.garantia_dias ? ` · Garantia: ${os.garantia_dias} dias` : ''}
-                    </p>
+                    <div className="flex items-start gap-2 shrink-0">
+                      {os.valor_final != null && (
+                        <p className="text-sm font-semibold text-gray-800 text-right">
+                          {formatCurrencyBRL(os.valor_final)}
+                          <span className="block text-[11px] font-normal text-gray-400">valor final</span>
+                        </p>
+                      )}
+                      {expandidoId === os.id ? (
+                        <ChevronUp size={18} className="text-gray-400 mt-0.5" />
+                      ) : (
+                        <ChevronDown size={18} className="text-gray-400 mt-0.5" />
+                      )}
+                    </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    {os.valor_final != null && (
-                      <p className="text-sm font-semibold text-gray-800">
-                        {formatCurrencyBRL(os.valor_final)}
-                        <span className="block text-[11px] font-normal text-gray-400">valor final</span>
-                      </p>
-                    )}
-                  </div>
-                </div>
+                </button>
 
+                {expandidoId === os.id && (
+                  <div className="px-4 pb-4 border-t border-gray-100 pt-3">
                 {os.status === 'em_andamento' && (
                   <div className="mb-2">
                     {editandoStatusId === os.id ? (
@@ -973,10 +1047,15 @@ export default function OrdensServico() {
                     <Trash2 size={13} />
                   </button>
                 </div>
+                  </div>
+                )}
               </li>
-            )
-          })}
-        </ul>
+                  )
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )
