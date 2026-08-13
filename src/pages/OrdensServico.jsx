@@ -45,7 +45,6 @@ function formatDataHora(str) {
 const CAMPOS_VAZIOS = {
   cliente_id: '',
   equipamento_id: '',
-  ativo_id: '',
   categoria_id: '',
   centro_custo_id: '',
   descricao_problema: '',
@@ -90,6 +89,7 @@ export default function OrdensServico() {
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
   const [form, setForm] = useState(CAMPOS_VAZIOS)
+  const [ativosSelecionados, setAtivosSelecionados] = useState([]) // [{id, local, codigo}]
   const [mostrarForm, setMostrarForm] = useState(false)
   const [editandoId, setEditandoId] = useState(null)
   const [filtroStatus, setFiltroStatus] = useState('abertas')
@@ -117,7 +117,7 @@ export default function OrdensServico() {
       supabase
         .from('ordens_servico')
         .select(
-          '*, clientes(nome, telefone, endereco), equipamentos(nome), categorias(nome), centros_de_custo(nome), ordens_servico_pecas(id, peca_id, nome_peca, quantidade, valor_unitario)'
+          '*, clientes(nome, telefone, endereco), equipamentos(nome), categorias(nome), centros_de_custo(nome), ordens_servico_pecas(id, peca_id, nome_peca, quantidade, valor_unitario), ordens_servico_ativos(ativo_id, ativos(local, codigo))'
         )
         .order('numero', { ascending: false })
         .range(0, 9999),
@@ -139,6 +139,7 @@ export default function OrdensServico() {
 
   function cancelarFormulario() {
     setForm(CAMPOS_VAZIOS)
+    setAtivosSelecionados([])
     setEditandoId(null)
     setMostrarForm(false)
   }
@@ -157,7 +158,6 @@ export default function OrdensServico() {
       observacoes: form.observacoes || null,
       data_abertura: form.data_abertura,
       cliente_final: form.cliente_final || null,
-      ativo_id: form.ativo_id || null,
     }
 
     // Se a OS já está finalizada, permite corrigir a data de conclusão também
@@ -166,14 +166,38 @@ export default function OrdensServico() {
       payload.data_conclusao = form.data_conclusao_edicao
     }
 
-    const { error } = editandoId
-      ? await supabase.from('ordens_servico').update(payload).eq('id', editandoId)
-      : await supabase.from('ordens_servico').insert(payload)
+    let osId = editandoId
+    if (editandoId) {
+      const { error } = await supabase.from('ordens_servico').update(payload).eq('id', editandoId)
+      if (error) {
+        setErro(error.message)
+        return
+      }
+    } else {
+      const { data, error } = await supabase.from('ordens_servico').insert(payload).select().single()
+      if (error) {
+        setErro(error.message)
+        return
+      }
+      osId = data.id
+    }
 
-    if (error) {
-      setErro(error.message)
+    // Sincroniza os equipamentos vinculados: apaga os antigos e grava os selecionados agora
+    const { error: erroDelete } = await supabase.from('ordens_servico_ativos').delete().eq('ordem_servico_id', osId)
+    if (erroDelete) {
+      setErro(erroDelete.message)
       return
     }
+    if (ativosSelecionados.length > 0) {
+      const { error: erroInsert } = await supabase
+        .from('ordens_servico_ativos')
+        .insert(ativosSelecionados.map((a) => ({ ordem_servico_id: osId, ativo_id: a.id })))
+      if (erroInsert) {
+        setErro(erroInsert.message)
+        return
+      }
+    }
+
     cancelarFormulario()
     carregar()
   }
@@ -190,12 +214,22 @@ export default function OrdensServico() {
       observacoes: os.observacoes || '',
       data_abertura: os.data_abertura,
       cliente_final: os.cliente_final || '',
-      ativo_id: os.ativo_id || '',
       data_conclusao_edicao: os.data_conclusao || '',
     })
+    setAtivosSelecionados(
+      (os.ordens_servico_ativos || []).map((v) => ({ id: v.ativo_id, local: v.ativos?.local, codigo: v.ativos?.codigo }))
+    )
     setEditandoId(os.id)
     setMostrarForm(true)
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function adicionarAtivo(ativo) {
+    setAtivosSelecionados((prev) => (prev.some((a) => a.id === ativo.id) ? prev : [...prev, ativo]))
+  }
+
+  function removerAtivo(ativoId) {
+    setAtivosSelecionados((prev) => prev.filter((a) => a.id !== ativoId))
   }
 
   async function handleClienteSelecionado(clienteId) {
@@ -563,12 +597,28 @@ export default function OrdensServico() {
             className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
 
-          <BuscaAtivo
-            clienteId={form.cliente_id}
-            value={form.ativo_id}
-            onChange={(id) => setForm({ ...form, ativo_id: id })}
-            placeholder="Equipamento específico (opcional — pra controle por QR code)..."
-          />
+          <div className="col-span-1 sm:col-span-2">
+            <BuscaAtivo
+              clienteId={form.cliente_id}
+              onSelecionar={adicionarAtivo}
+              placeholder="Adicionar equipamento específico (opcional — pra controle por QR code)..."
+            />
+            {ativosSelecionados.length > 0 && (
+              <ul className="flex flex-wrap gap-1.5 mt-2">
+                {ativosSelecionados.map((a) => (
+                  <li
+                    key={a.id}
+                    className="flex items-center gap-1.5 text-xs bg-primary-50 text-primary-700 px-2 py-1 rounded-full"
+                  >
+                    REF-{a.codigo} · {a.local || '(sem local)'}
+                    <button type="button" onClick={() => removerAtivo(a.id)} className="text-primary-500 hover:text-primary-800">
+                      <X size={12} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           {editandoOSFinalizada && (
             <div className="col-span-1 sm:col-span-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
@@ -708,6 +758,11 @@ export default function OrdensServico() {
                       </p>
                       {os.cliente_final && (
                         <p className="text-xs text-blue-600">Cliente final: {os.cliente_final}</p>
+                      )}
+                      {(os.ordens_servico_ativos || []).length > 0 && (
+                        <p className="text-xs text-teal-600">
+                          Equipamentos: {os.ordens_servico_ativos.map((v) => `REF-${v.ativos?.codigo}`).join(', ')}
+                        </p>
                       )}
                       <p className="text-sm text-gray-600 mt-0.5 whitespace-pre-wrap">{os.descricao_problema}</p>
                       {os.status === 'finalizada' && os.servicos_realizados && (

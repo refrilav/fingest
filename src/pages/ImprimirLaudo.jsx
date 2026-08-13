@@ -26,7 +26,7 @@ export default function ImprimirLaudo() {
       setLoading(true)
       const { data, error } = await supabase
         .from('laudos')
-        .select('*, clientes(nome, documento, endereco, bairro, cidade), ativos(local)')
+        .select('*, clientes(nome, documento, endereco, bairro, cidade), laudo_ativos(descricao_equipamento, capacidade_btu, ativos(local, modelo, capacidade_btu))')
         .eq('id', id)
         .single()
       if (error) {
@@ -90,9 +90,7 @@ export default function ImprimirLaudo() {
               <td className="border border-gray-300 px-2 py-1">{cliente?.documento ? `CPF/CNPJ: ${cliente.documento}` : ''}</td>
             </tr>
             <tr>
-              <td className="border border-gray-300 px-2 py-1">
-                {[laudo.ativos?.local, cliente?.endereco].filter(Boolean).join(', ') || '—'}
-              </td>
+              <td className="border border-gray-300 px-2 py-1">{cliente?.endereco || '—'}</td>
             </tr>
             <tr>
               <td className="border border-gray-300 px-2 py-1">
@@ -111,10 +109,21 @@ export default function ImprimirLaudo() {
               <td className="border border-gray-300 px-2 py-1 font-medium">Equipamento</td>
               <td className="border border-gray-300 px-2 py-1 font-medium">Capacidade BTU</td>
             </tr>
-            <tr>
-              <td className="border border-gray-300 px-2 py-1">{laudo.equipamento_descricao || '—'}</td>
-              <td className="border border-gray-300 px-2 py-1">{laudo.capacidade_btu || '—'}</td>
-            </tr>
+            {(laudo.laudo_ativos || []).length === 0 ? (
+              <tr>
+                <td className="border border-gray-300 px-2 py-1">—</td>
+                <td className="border border-gray-300 px-2 py-1">—</td>
+              </tr>
+            ) : (
+              laudo.laudo_ativos.map((eq, i) => (
+                <tr key={i}>
+                  <td className="border border-gray-300 px-2 py-1">
+                    {eq.descricao_equipamento || eq.ativos?.modelo || '—'}
+                  </td>
+                  <td className="border border-gray-300 px-2 py-1">{eq.capacidade_btu || eq.ativos?.capacidade_btu || '—'}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
 
