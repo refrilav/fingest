@@ -48,7 +48,7 @@ export default function RelatorioFinanceiro() {
   const [loading, setLoading] = useState(true)
 
   const [filtroTipo, setFiltroTipo] = useState(searchParams.get('tipo') || 'ambos')
-  const [filtroStatus, setFiltroStatus] = useState('todos')
+  const [filtroStatus, setFiltroStatus] = useState(['aberto', 'vencido', 'pago', 'cancelado'])
   const [filtroCategoriaId, setFiltroCategoriaId] = useState('')
   const [filtroCentroCustoId, setFiltroCentroCustoId] = useState('')
   const [filtroContaId, setFiltroContaId] = useState('')
@@ -90,10 +90,14 @@ export default function RelatorioFinanceiro() {
     setColunasSelecionadas((prev) => (prev.includes(chave) ? prev.filter((c) => c !== chave) : [...prev, chave]))
   }
 
+  function alternarStatus(status) {
+    setFiltroStatus((prev) => (prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]))
+  }
+
   function gerarRelatorio() {
     const filtrado = lista.filter((l) => {
       if (filtroTipo !== 'ambos' && l.tipo !== filtroTipo) return false
-      if (filtroStatus !== 'todos' && statusReal(l) !== filtroStatus) return false
+      if (!filtroStatus.includes(statusReal(l))) return false
       if (filtroCategoriaId && l.categoria_id !== filtroCategoriaId) return false
       if (filtroCentroCustoId && l.centro_custo_id !== filtroCentroCustoId) return false
       if (filtroContaId && l.conta_bancaria_id !== filtroContaId) return false
@@ -126,7 +130,7 @@ export default function RelatorioFinanceiro() {
 
   const resumoFiltro = [
     filtroTipo === 'ambos' ? 'Pagar + Receber' : filtroTipo === 'pagar' ? 'Contas a Pagar' : 'Contas a Receber',
-    filtroStatus !== 'todos' ? STATUS_LABEL[filtroStatus] : null,
+    filtroStatus.length < 4 ? filtroStatus.map((s) => STATUS_LABEL[s]).join(' + ') : null,
     dataDe || dataAte
       ? `${{ vencimento: 'Vencimento', competencia: 'Competência', pagamento: 'Pagamento' }[campoData]}: ${dataDe ? formatDateBR(dataDe) : '...'} a ${dataAte ? formatDateBR(dataAte) : '...'}`
       : null,
@@ -159,18 +163,15 @@ export default function RelatorioFinanceiro() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Status</label>
-              <select
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              >
-                <option value="todos">Todos</option>
-                <option value="aberto">Em aberto</option>
-                <option value="vencido">Vencido</option>
-                <option value="pago">Pago</option>
-                <option value="cancelado">Cancelado</option>
-              </select>
+              <label className="block text-xs text-gray-500 mb-1">Status (marque quantos quiser)</label>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 rounded-lg border border-gray-300 px-3 py-2">
+                {Object.entries(STATUS_LABEL).map(([valor, label]) => (
+                  <label key={valor} className="flex items-center gap-1.5 text-sm text-gray-600">
+                    <input type="checkbox" checked={filtroStatus.includes(valor)} onChange={() => alternarStatus(valor)} />
+                    {label}
+                  </label>
+                ))}
+              </div>
             </div>
 
             <select
@@ -255,7 +256,7 @@ export default function RelatorioFinanceiro() {
         <div className="flex flex-wrap gap-2 mb-6">
           <button
             onClick={gerarRelatorio}
-            disabled={colunasAtivas.length === 0 || loading}
+            disabled={colunasAtivas.length === 0 || filtroStatus.length === 0 || loading}
             className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
           >
             <Wallet size={16} /> Gerar relatório
