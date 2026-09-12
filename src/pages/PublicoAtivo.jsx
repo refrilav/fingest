@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatDateBR } from '../lib/format'
-import { Wrench, Calendar, User, FileText } from 'lucide-react'
+import { Calendar, User, FileText } from 'lucide-react'
 
 // Soma meses a uma data 'YYYY-MM-DD' sem usar new Date() pra exibir (convenção do projeto)
 function somarMeses(dataISO, meses) {
@@ -13,13 +13,24 @@ function somarMeses(dataISO, meses) {
   return `${novoAno}-${String(novoMes).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 }
 
+const TIPOS_SERVICO = {
+  higienizacao: { label: 'Higienização', emoji: '🧽', cor: 'bg-teal-50 text-teal-700' },
+  instalacao: { label: 'Instalação', emoji: '⚙️', cor: 'bg-blue-50 text-blue-700' },
+  manutencao_corretiva: { label: 'Manutenção corretiva', emoji: '🔧', cor: 'bg-amber-50 text-amber-700' },
+  outro: { label: 'Serviço', emoji: '🛠️', cor: 'bg-gray-100 text-gray-600' },
+}
+
+function infoTipo(tipo) {
+  return TIPOS_SERVICO[tipo] || TIPOS_SERVICO.outro
+}
+
 export default function PublicoAtivo() {
   const { id } = useParams()
   const [ativo, setAtivo] = useState(null)
   const [historico, setHistorico] = useState([])
-  const [laudosPorOS, setLaudosPorOS] = useState({})
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
+  const [laudosPorOS, setLaudosPorOS] = useState({})
 
   useEffect(() => {
     async function carregar() {
@@ -31,7 +42,7 @@ export default function PublicoAtivo() {
           .select('*')
           .eq('ativo_id', id)
           .order('data_conclusao', { ascending: false }),
-        supabase.from('laudos').select('id, ordem_servico_id').eq('ativo_id', id),
+        supabase.from('laudo_ativos').select('laudo_id, laudos(ordem_servico_id)').eq('ativo_id', id),
       ])
       if (ativoRes.error) {
         setErro('Não encontramos esse equipamento.')
@@ -41,7 +52,7 @@ export default function PublicoAtivo() {
       setAtivo(ativoRes.data)
       setHistorico(histRes.data || [])
       setLaudosPorOS(
-        Object.fromEntries((laudosRes.data || []).map((l) => [l.ordem_servico_id, l.id]))
+        Object.fromEntries((laudosRes.data || []).map((v) => [v.laudos?.ordem_servico_id, v.laudo_id]))
       )
       setLoading(false)
     }
@@ -52,8 +63,10 @@ export default function PublicoAtivo() {
   if (erro) return <p className="text-red-600 text-sm p-6 text-center">{erro}</p>
   if (!ativo) return null
 
-  const ultima = historico[0]
-  const proxima = ultima?.data_conclusao ? somarMeses(ultima.data_conclusao, ativo.intervalo_meses) : null
+  // "Próxima higienização" só recalcula depois de Higienização ou Instalação —
+  // uma manutenção corretiva no meio do caminho não deve mexer nessa previsão.
+  const ultimaRelevante = historico.find((h) => h.tipo_servico === 'higienizacao' || h.tipo_servico === 'instalacao')
+  const proxima = ultimaRelevante?.data_conclusao ? somarMeses(ultimaRelevante.data_conclusao, ativo.intervalo_meses) : null
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -81,38 +94,43 @@ export default function PublicoAtivo() {
           </div>
         )}
 
-        <p className="text-sm font-semibold text-gray-700 mb-2">Histórico de higienização</p>
+        <p className="text-sm font-semibold text-gray-700 mb-2">Histórico de manutenção</p>
         {historico.length === 0 ? (
-          <p className="text-sm text-gray-400">Nenhuma higienização registrada ainda.</p>
+          <p className="text-sm text-gray-400">Nenhum serviço registrado ainda.</p>
         ) : (
           <ul className="space-y-2">
-            {historico.map((h, i) => (
-              <li key={i} className="bg-white border border-gray-200 rounded-xl p-4">
-                <p className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
-                  <Calendar size={14} className="text-gray-400" />
-                  {h.data_conclusao ? formatDateBR(h.data_conclusao) : '—'}
-                </p>
-                {h.servicos_realizados && (
-                  <p className="flex items-start gap-1.5 text-sm text-gray-600 mt-1.5">
-                    <Wrench size={14} className="text-gray-400 mt-0.5 shrink-0" />
-                    <span className="whitespace-pre-wrap">{h.servicos_realizados}</span>
-                  </p>
-                )}
-                {h.tecnico && (
-                  <p className="flex items-center gap-1.5 text-xs text-gray-500 mt-1.5">
-                    <User size={12} className="text-gray-400" /> {h.tecnico}
-                  </p>
-                )}
-                {laudosPorOS[h.os_id] && (
-                  <Link
-                    to={`/laudo/${laudosPorOS[h.os_id]}/imprimir`}
-                    className="flex items-center gap-1.5 text-xs text-primary-700 hover:underline mt-2"
-                  >
-                    <FileText size={12} /> Ver laudo de manutenção
-                  </Link>
-                )}
-              </li>
-            ))}
+            {historico.map((h, i) => {
+              const tipo = infoTipo(h.tipo_servico)
+              return (
+                <li key={i} className="bg-white border border-gray-200 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${tipo.cor}`}>
+                      {tipo.emoji} {tipo.label}
+                    </span>
+                    <p className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <Calendar size={12} className="text-gray-400" />
+                      {h.data_conclusao ? formatDateBR(h.data_conclusao) : '—'}
+                    </p>
+                  </div>
+                  {h.servicos_realizados && (
+                    <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{h.servicos_realizados}</p>
+                  )}
+                  {h.tecnico && (
+                    <p className="flex items-center gap-1.5 text-xs text-gray-500 mt-1.5">
+                      <User size={12} className="text-gray-400" /> {h.tecnico}
+                    </p>
+                  )}
+                  {laudosPorOS[h.os_id] && (
+                    <Link
+                      to={`/laudo/${laudosPorOS[h.os_id]}/imprimir`}
+                      className="flex items-center gap-1.5 text-xs text-primary-700 hover:underline mt-2"
+                    >
+                      <FileText size={12} /> Ver laudo de manutenção
+                    </Link>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         )}
 

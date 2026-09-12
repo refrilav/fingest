@@ -42,11 +42,19 @@ function formatDataHora(str) {
   return `${dia}/${mes}${hora ? ` ${hora.substring(0, 5)}` : ''}`
 }
 
+const TIPOS_SERVICO = [
+  { valor: 'higienizacao', label: 'Higienização' },
+  { valor: 'instalacao', label: 'Instalação' },
+  { valor: 'manutencao_corretiva', label: 'Manutenção corretiva' },
+  { valor: 'outro', label: 'Outro' },
+]
+
 const CAMPOS_VAZIOS = {
   cliente_id: '',
   equipamento_id: '',
   categoria_id: '',
   centro_custo_id: '',
+  tipo_servico: '',
   descricao_problema: '',
   mostrar_problema_na_impressao: true,
   endereco: '',
@@ -157,6 +165,7 @@ export default function OrdensServico() {
       equipamento_id: form.equipamento_id || null,
       categoria_id: form.categoria_id || null,
       centro_custo_id: form.centro_custo_id || null,
+      tipo_servico: form.tipo_servico || null,
       descricao_problema: form.descricao_problema.trim(),
       mostrar_problema_na_impressao: form.mostrar_problema_na_impressao,
       endereco: form.endereco || null,
@@ -213,6 +222,7 @@ export default function OrdensServico() {
       equipamento_id: os.equipamento_id || '',
       categoria_id: os.categoria_id || '',
       centro_custo_id: os.centro_custo_id || '',
+      tipo_servico: os.tipo_servico || '',
       descricao_problema: os.descricao_problema || '',
       mostrar_problema_na_impressao: os.mostrar_problema_na_impressao ?? true,
       endereco: os.endereco || '',
@@ -629,6 +639,17 @@ export default function OrdensServico() {
             ))}
           </select>
 
+          <select
+            value={form.tipo_servico}
+            onChange={(e) => setForm({ ...form, tipo_servico: e.target.value })}
+            className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          >
+            <option value="">Tipo de serviço (opcional — aparece no histórico do QR code)...</option>
+            {TIPOS_SERVICO.map((t) => (
+              <option key={t.valor} value={t.valor}>{t.label}</option>
+            ))}
+          </select>
+
           <input
             placeholder="Cliente final (opcional — quando o cliente acima é um parceiro/intermediário)"
             value={form.cliente_final}
@@ -812,6 +833,11 @@ export default function OrdensServico() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-mono text-gray-400">OS #{os.numero}</span>
                         <StatusBadge status={os.status} />
+                        {os.tipo_servico && (
+                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                            {TIPOS_SERVICO.find((t) => t.valor === os.tipo_servico)?.label || os.tipo_servico}
+                          </span>
+                        )}
                         {os.status === 'em_andamento' && os.status_atual && (
                           <span className="flex items-center gap-1 text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">
                             <Wrench size={11} /> {os.status_atual}
