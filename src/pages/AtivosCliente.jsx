@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { ArrowLeft, Plus, X, Trash2, QrCode, Pencil, Check } from 'lucide-react'
 
-const ITEM_VAZIO = { local: '', modelo: '', numero_serie: '', equipamento_id: '', intervalo_meses: '3' }
+const ITEM_VAZIO = { codigo: '', local: '', modelo: '', numero_serie: '', equipamento_id: '', intervalo_meses: '3' }
 
 export default function AtivosCliente() {
   const { clienteId } = useParams()
@@ -17,10 +17,11 @@ export default function AtivosCliente() {
   const [editandoId, setEditandoId] = useState(null)
   const [editForm, setEditForm] = useState(ITEM_VAZIO)
   const [salvando, setSalvando] = useState(false)
+  const [maiorCodigoGlobal, setMaiorCodigoGlobal] = useState(0)
 
   async function carregar() {
     setLoading(true)
-    const [clienteRes, ativosRes, equipRes] = await Promise.all([
+    const [clienteRes, ativosRes, equipRes, codigoRes] = await Promise.all([
       supabase.from('clientes').select('nome').eq('id', clienteId).single(),
       supabase
         .from('ativos')
@@ -30,10 +31,13 @@ export default function AtivosCliente() {
         .order('codigo')
         .range(0, 9999),
       supabase.from('equipamentos').select('*').eq('ativo', true).order('nome').range(0, 9999),
+      // maior código já usado, em QUALQUER cliente — a referência é uma numeração única do sistema todo
+      supabase.from('ativos').select('codigo').order('codigo', { ascending: false }).limit(1).maybeSingle(),
     ])
     setCliente(clienteRes.data)
     setAtivos(ativosRes.data || [])
     setEquipamentos(equipRes.data || [])
+    setMaiorCodigoGlobal(codigoRes.data?.codigo || 0)
     setLoading(false)
   }
 
@@ -42,6 +46,18 @@ export default function AtivosCliente() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clienteId])
 
+  // Sugere o próximo número livre, considerando também os que já estão sendo digitados agora
+  function proximoCodigoSugerido(listaAtual) {
+    const codigosEmUso = listaAtual.map((n) => Number(n.codigo) || 0)
+    const maior = Math.max(maiorCodigoGlobal, ...codigosEmUso)
+    return String(maior + 1)
+  }
+
+  function abrirFormulario() {
+    setNovos([{ ...ITEM_VAZIO, codigo: proximoCodigoSugerido([]) }])
+    setMostrarForm(true)
+  }
+
   function atualizarNovo(i, campo, valor) {
     const copia = [...novos]
     copia[i] = { ...copia[i], [campo]: valor }
@@ -49,7 +65,7 @@ export default function AtivosCliente() {
   }
 
   function adicionarLinha() {
-    setNovos([...novos, { ...ITEM_VAZIO }])
+    setNovos([...novos, { ...ITEM_VAZIO, codigo: proximoCodigoSugerido(novos) }])
   }
 
   function removerLinha(i) {
@@ -67,6 +83,7 @@ export default function AtivosCliente() {
     setErro(null)
     const linhas = validos.map((n) => ({
       cliente_id: clienteId,
+      codigo: n.codigo ? Number(n.codigo) : undefined,
       local: n.local || null,
       modelo: n.modelo || null,
       numero_serie: n.numero_serie || null,
@@ -76,7 +93,11 @@ export default function AtivosCliente() {
     const { error } = await supabase.from('ativos').insert(linhas)
     setSalvando(false)
     if (error) {
-      setErro(error.message)
+      setErro(
+        error.message.includes('ativos_codigo_unique') || error.message.includes('duplicate')
+          ? `Já existe um equipamento com essa referência. Escolha outro número. (${error.message})`
+          : error.message
+      )
       return
     }
     setNovos([{ ...ITEM_VAZIO }])
@@ -87,6 +108,7 @@ export default function AtivosCliente() {
   function iniciarEdicao(a) {
     setEditandoId(a.id)
     setEditForm({
+      codigo: String(a.codigo ?? ''),
       local: a.local || '',
       modelo: a.modelo || '',
       numero_serie: a.numero_serie || '',
@@ -99,6 +121,7 @@ export default function AtivosCliente() {
     const { error } = await supabase
       .from('ativos')
       .update({
+        codigo: editForm.codigo ? Number(editForm.codigo) : null,
         local: editForm.local || null,
         modelo: editForm.modelo || null,
         numero_serie: editForm.numero_serie || null,
@@ -107,7 +130,11 @@ export default function AtivosCliente() {
       })
       .eq('id', id)
     if (error) {
-      setErro(error.message)
+      setErro(
+        error.message.includes('ativos_codigo_unique') || error.message.includes('duplicate')
+          ? `Já existe um equipamento com essa referência. Escolha outro número. (${error.message})`
+          : error.message
+      )
       return
     }
     setEditandoId(null)
@@ -138,7 +165,7 @@ export default function AtivosCliente() {
             </Link>
           )}
           <button
-            onClick={() => setMostrarForm(!mostrarForm)}
+            onClick={() => (mostrarForm ? setMostrarForm(false) : abrirFormulario())}
             className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700"
           >
             <Plus size={16} /> Adicionar
@@ -147,7 +174,7 @@ export default function AtivosCliente() {
       </div>
       <p className="text-gray-500 text-sm mb-4">
         Cada linha aqui é um equipamento físico específico (ex: "Split Sala 204"). Vincule as OS's a eles pra montar o
-        histórico de higienização por QR code.
+        histórico de higienização por QR code. A referência (REF-X) já vem sugerida, mas pode alterar se quiser.
       </p>
 
       {erro && <div className="mb-4 rounded-lg bg-red-50 text-red-700 text-sm px-4 py-2">{erro}</div>}
@@ -158,11 +185,20 @@ export default function AtivosCliente() {
           <div className="space-y-2 mb-2">
             {novos.map((n, i) => (
               <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-gray-50 rounded-lg p-2">
+                <div className="sm:col-span-2 flex items-center gap-1">
+                  <span className="text-xs text-gray-400">REF-</span>
+                  <input
+                    type="number"
+                    value={n.codigo}
+                    onChange={(e) => atualizarNovo(i, 'codigo', e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                  />
+                </div>
                 <input
                   placeholder="Local (ex: Sala 204)"
                   value={n.local}
                   onChange={(e) => atualizarNovo(i, 'local', e.target.value)}
-                  className="sm:col-span-4 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                  className="sm:col-span-3 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
                 />
                 <select
                   value={n.equipamento_id}
@@ -178,7 +214,7 @@ export default function AtivosCliente() {
                   placeholder="Modelo (opcional)"
                   value={n.modelo}
                   onChange={(e) => atualizarNovo(i, 'modelo', e.target.value)}
-                  className="sm:col-span-3 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                  className="sm:col-span-2 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
                 />
                 <input
                   type="number"
@@ -233,10 +269,19 @@ export default function AtivosCliente() {
             <li key={a.id} className="px-4 py-3">
               {editandoId === a.id ? (
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                  <div className="sm:col-span-2 flex items-center gap-1">
+                    <span className="text-xs text-gray-400">REF-</span>
+                    <input
+                      type="number"
+                      value={editForm.codigo}
+                      onChange={(e) => setEditForm({ ...editForm, codigo: e.target.value })}
+                      className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                    />
+                  </div>
                   <input
                     value={editForm.local}
                     onChange={(e) => setEditForm({ ...editForm, local: e.target.value })}
-                    className="sm:col-span-4 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                    className="sm:col-span-3 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
                   />
                   <select
                     value={editForm.equipamento_id}
@@ -252,7 +297,7 @@ export default function AtivosCliente() {
                     value={editForm.modelo}
                     onChange={(e) => setEditForm({ ...editForm, modelo: e.target.value })}
                     placeholder="Modelo"
-                    className="sm:col-span-3 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                    className="sm:col-span-2 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
                   />
                   <input
                     type="number"
