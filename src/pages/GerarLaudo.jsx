@@ -16,13 +16,18 @@ const CHECKLIST_PADRAO = [
   'Pulverizar bactericida',
 ]
 
+// junta local + modelo do equipamento cadastrado, ex: "Sala 204 — Elgin 18000"
+function descricaoDoAtivo(ativo) {
+  return [ativo?.local, ativo?.modelo].filter(Boolean).join(' — ')
+}
+
 export default function GerarLaudo() {
   const { osId } = useParams()
   const navigate = useNavigate()
   const [os, setOs] = useState(null)
   const [laudoExistente, setLaudoExistente] = useState(null)
   const [dataEmissao, setDataEmissao] = useState(todayISO())
-  const [equipamentosLaudo, setEquipamentosLaudo] = useState([]) // [{ativo_id, descricao, capacidade_btu}]
+  const [equipamentosLaudo, setEquipamentosLaudo] = useState([]) // [{ativo_id, descricao}]
   const [checklist, setChecklist] = useState(CHECKLIST_PADRAO.map((descricao) => ({ descricao, status: 'OK', observacoes: '' })))
   const [loading, setLoading] = useState(true)
   const [salvando, setSalvando] = useState(false)
@@ -34,7 +39,7 @@ export default function GerarLaudo() {
       const [osRes, laudoRes] = await Promise.all([
         supabase
           .from('ordens_servico')
-          .select('*, clientes(nome), equipamentos(nome), ordens_servico_ativos(ativo_id, ativos(local, modelo, capacidade_btu))')
+          .select('*, clientes(nome), equipamentos(nome), ordens_servico_ativos(ativo_id, ativos(local, modelo))')
           .eq('id', osId)
           .single(),
         supabase.from('laudos').select('*, laudo_ativos(*)').eq('ordem_servico_id', osId).maybeSingle(),
@@ -54,7 +59,6 @@ export default function GerarLaudo() {
           (laudoRes.data.laudo_ativos || []).map((la) => ({
             ativo_id: la.ativo_id,
             descricao: la.descricao_equipamento || '',
-            capacidade_btu: la.capacidade_btu || '',
           }))
         )
       } else {
@@ -64,12 +68,11 @@ export default function GerarLaudo() {
           setEquipamentosLaudo(
             vinculados.map((v) => ({
               ativo_id: v.ativo_id,
-              descricao: v.ativos?.modelo || osRes.data.equipamentos?.nome || '',
-              capacidade_btu: v.ativos?.capacidade_btu || '',
+              descricao: descricaoDoAtivo(v.ativos) || osRes.data.equipamentos?.nome || '',
             }))
           )
         } else {
-          setEquipamentosLaudo([{ ativo_id: null, descricao: osRes.data.equipamentos?.nome || '', capacidade_btu: '' }])
+          setEquipamentosLaudo([{ ativo_id: null, descricao: osRes.data.equipamentos?.nome || '' }])
         }
       }
       setLoading(false)
@@ -77,14 +80,14 @@ export default function GerarLaudo() {
     carregar()
   }, [osId])
 
-  function atualizarEquip(i, campo, valor) {
+  function atualizarEquip(i, valor) {
     const novos = [...equipamentosLaudo]
-    novos[i] = { ...novos[i], [campo]: valor }
+    novos[i] = { ...novos[i], descricao: valor }
     setEquipamentosLaudo(novos)
   }
 
   function adicionarEquip() {
-    setEquipamentosLaudo([...equipamentosLaudo, { ativo_id: null, descricao: '', capacidade_btu: '' }])
+    setEquipamentosLaudo([...equipamentosLaudo, { ativo_id: null, descricao: '' }])
   }
 
   function removerEquip(i) {
@@ -141,7 +144,6 @@ export default function GerarLaudo() {
           laudo_id: laudoId,
           ativo_id: e.ativo_id || null,
           descricao_equipamento: e.descricao || null,
-          capacidade_btu: e.capacidade_btu || null,
         }))
       )
       if (erroEquip) {
@@ -188,16 +190,10 @@ export default function GerarLaudo() {
           {equipamentosLaudo.map((eq, i) => (
             <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-gray-50 rounded-lg p-2">
               <input
-                placeholder="Equipamento (ex: Split EOS)"
+                placeholder="Equipamento (ex: Sala 204 — Elgin 18000)"
                 value={eq.descricao}
-                onChange={(e) => atualizarEquip(i, 'descricao', e.target.value)}
-                className="sm:col-span-7 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-              />
-              <input
-                placeholder="Capacidade BTU"
-                value={eq.capacidade_btu}
-                onChange={(e) => atualizarEquip(i, 'capacidade_btu', e.target.value)}
-                className="sm:col-span-4 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                onChange={(e) => atualizarEquip(i, e.target.value)}
+                className="sm:col-span-11 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
               />
               <button onClick={() => removerEquip(i)} className="sm:col-span-1 text-gray-400 hover:text-red-600 justify-self-end">
                 <X size={16} />
