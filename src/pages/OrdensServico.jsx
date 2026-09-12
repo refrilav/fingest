@@ -94,6 +94,9 @@ export default function OrdensServico() {
   const [editandoId, setEditandoId] = useState(null)
   const [filtroStatus, setFiltroStatus] = useState('abertas')
 
+  const [mostrarListaAtivos, setMostrarListaAtivos] = useState(false)
+  const [ativosDoCliente, setAtivosDoCliente] = useState([])
+
   const [editandoStatusId, setEditandoStatusId] = useState(null)
   const [statusAtualForm, setStatusAtualForm] = useState({ opcao: STATUS_ATUAL_OPCOES[0], texto: '', dataAgendamento: '' })
 
@@ -140,6 +143,8 @@ export default function OrdensServico() {
   function cancelarFormulario() {
     setForm(CAMPOS_VAZIOS)
     setAtivosSelecionados([])
+    setMostrarListaAtivos(false)
+    setAtivosDoCliente([])
     setEditandoId(null)
     setMostrarForm(false)
   }
@@ -219,6 +224,8 @@ export default function OrdensServico() {
     setAtivosSelecionados(
       (os.ordens_servico_ativos || []).map((v) => ({ id: v.ativo_id, local: v.ativos?.local, codigo: v.ativos?.codigo }))
     )
+    setMostrarListaAtivos(false)
+    setAtivosDoCliente([])
     setEditandoId(os.id)
     setMostrarForm(true)
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -232,8 +239,40 @@ export default function OrdensServico() {
     setAtivosSelecionados((prev) => prev.filter((a) => a.id !== ativoId))
   }
 
+  async function carregarAtivosDoCliente(clienteId) {
+    if (!clienteId) {
+      setAtivosDoCliente([])
+      return
+    }
+    const { data, error } = await supabase
+      .from('ativos')
+      .select('id, codigo, local')
+      .eq('cliente_id', clienteId)
+      .eq('ativo', true)
+      .order('codigo')
+      .range(0, 9999)
+    if (error) {
+      setErro(error.message)
+      return
+    }
+    setAtivosDoCliente(data || [])
+  }
+
+  function alternarListaAtivos() {
+    if (!mostrarListaAtivos) carregarAtivosDoCliente(form.cliente_id)
+    setMostrarListaAtivos(!mostrarListaAtivos)
+  }
+
+  function alternarAtivoNaLista(ativo) {
+    setAtivosSelecionados((prev) =>
+      prev.some((a) => a.id === ativo.id) ? prev.filter((a) => a.id !== ativo.id) : [...prev, ativo]
+    )
+  }
+
   async function handleClienteSelecionado(clienteId) {
     setForm((f) => ({ ...f, cliente_id: clienteId }))
+    setMostrarListaAtivos(false)
+    setAtivosDoCliente([])
     if (!clienteId) return
     const { data } = await supabase.from('clientes').select('endereco').eq('id', clienteId).single()
     if (data?.endereco) {
@@ -603,6 +642,37 @@ export default function OrdensServico() {
               onSelecionar={adicionarAtivo}
               placeholder="Adicionar equipamento específico (opcional — pra controle por QR code)..."
             />
+            {form.cliente_id && (
+              <button
+                type="button"
+                onClick={alternarListaAtivos}
+                className="text-xs text-primary-700 hover:underline mt-1.5"
+              >
+                {mostrarListaAtivos ? 'Esconder lista' : 'Ou marcar vários da lista'}
+              </button>
+            )}
+
+            {mostrarListaAtivos && (
+              <div className="mt-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                {ativosDoCliente.length === 0 ? (
+                  <p className="text-xs text-gray-400 col-span-1 sm:col-span-2">
+                    Nenhum equipamento cadastrado pra esse cliente ainda.
+                  </p>
+                ) : (
+                  ativosDoCliente.map((a) => (
+                    <label key={a.id} className="flex items-center gap-1.5 text-xs text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={ativosSelecionados.some((sel) => sel.id === a.id)}
+                        onChange={() => alternarAtivoNaLista(a)}
+                      />
+                      REF-{a.codigo} · {a.local || '(sem local)'}
+                    </label>
+                  ))
+                )}
+              </div>
+            )}
+
             {ativosSelecionados.length > 0 && (
               <ul className="flex flex-wrap gap-1.5 mt-2">
                 {ativosSelecionados.map((a) => (
