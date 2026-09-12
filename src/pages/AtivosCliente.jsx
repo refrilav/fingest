@@ -17,7 +17,7 @@ export default function AtivosCliente() {
   const [editandoId, setEditandoId] = useState(null)
   const [editForm, setEditForm] = useState(ITEM_VAZIO)
   const [salvando, setSalvando] = useState(false)
-  const [maiorCodigoGlobal, setMaiorCodigoGlobal] = useState(0)
+  const [maiorCodigoDoCliente, setMaiorCodigoDoCliente] = useState(0)
 
   async function carregar() {
     setLoading(true)
@@ -31,13 +31,13 @@ export default function AtivosCliente() {
         .order('codigo')
         .range(0, 9999),
       supabase.from('equipamentos').select('*').eq('ativo', true).order('nome').range(0, 9999),
-      // maior código já usado, em QUALQUER cliente — a referência é uma numeração única do sistema todo
-      supabase.from('ativos').select('codigo').order('codigo', { ascending: false }).limit(1).maybeSingle(),
+      // maior código já usado por ESSE cliente (ativo ou não, pra sempre sugerir um número livre)
+      supabase.from('ativos').select('codigo').eq('cliente_id', clienteId).order('codigo', { ascending: false }).limit(1).maybeSingle(),
     ])
     setCliente(clienteRes.data)
     setAtivos(ativosRes.data || [])
     setEquipamentos(equipRes.data || [])
-    setMaiorCodigoGlobal(codigoRes.data?.codigo || 0)
+    setMaiorCodigoDoCliente(codigoRes.data?.codigo || 0)
     setLoading(false)
   }
 
@@ -46,10 +46,10 @@ export default function AtivosCliente() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clienteId])
 
-  // Sugere o próximo número livre, considerando também os que já estão sendo digitados agora
+  // Sugere o próximo número livre PARA ESSE CLIENTE, considerando também os que já estão sendo digitados agora
   function proximoCodigoSugerido(listaAtual) {
     const codigosEmUso = listaAtual.map((n) => Number(n.codigo) || 0)
-    const maior = Math.max(maiorCodigoGlobal, ...codigosEmUso)
+    const maior = Math.max(maiorCodigoDoCliente, ...codigosEmUso)
     return String(maior + 1)
   }
 
@@ -94,8 +94,8 @@ export default function AtivosCliente() {
     setSalvando(false)
     if (error) {
       setErro(
-        error.message.includes('ativos_codigo_unique') || error.message.includes('duplicate')
-          ? `Já existe um equipamento com essa referência. Escolha outro número. (${error.message})`
+        error.message.includes('ativos_codigo_cliente_unique_ativo') || error.message.includes('duplicate')
+          ? `Esse cliente já tem um equipamento com essa referência. Escolha outro número.`
           : error.message
       )
       return
@@ -131,8 +131,8 @@ export default function AtivosCliente() {
       .eq('id', id)
     if (error) {
       setErro(
-        error.message.includes('ativos_codigo_unique') || error.message.includes('duplicate')
-          ? `Já existe um equipamento com essa referência. Escolha outro número. (${error.message})`
+        error.message.includes('ativos_codigo_cliente_unique_ativo') || error.message.includes('duplicate')
+          ? `Esse cliente já tem um equipamento com essa referência. Escolha outro número.`
           : error.message
       )
       return
@@ -174,7 +174,8 @@ export default function AtivosCliente() {
       </div>
       <p className="text-gray-500 text-sm mb-4">
         Cada linha aqui é um equipamento físico específico (ex: "Split Sala 204"). Vincule as OS's a eles pra montar o
-        histórico de higienização por QR code. A referência (REF-X) já vem sugerida, mas pode alterar se quiser.
+        histórico de higienização por QR code. A referência (REF-X) já vem sugerida e é numerada por cliente — pode
+        alterar se quiser.
       </p>
 
       {erro && <div className="mb-4 rounded-lg bg-red-50 text-red-700 text-sm px-4 py-2">{erro}</div>}
