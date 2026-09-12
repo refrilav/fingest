@@ -8,12 +8,11 @@ function urlPublica(ativoId) {
   return `${window.location.origin}/publico/ativo/${ativoId}`
 }
 
-// Gera a imagem do QR code via API pública (sem precisar instalar biblioteca)
+// Gera a imagem do QR code via API pública, sempre em alta resolução (a exibição
+// em si é controlada pela largura da coluna, não pelo tamanho pedido aqui)
 function qrImagemUrl(texto) {
-  return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data=${encodeURIComponent(texto)}`
+  return `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=8&data=${encodeURIComponent(texto)}`
 }
-
-const TAMANHOS_QR = { pequeno: 96, medio: 128, grande: 160 } // em px
 
 export default function ImprimirQRCodes() {
   const { clienteId } = useParams()
@@ -23,7 +22,6 @@ export default function ImprimirQRCodes() {
 
   // configuração de impressão (folha A4)
   const [colunas, setColunas] = useState(3)
-  const [tamanho, setTamanho] = useState('medio')
 
   useEffect(() => {
     async function carregar() {
@@ -41,8 +39,6 @@ export default function ImprimirQRCodes() {
 
   if (loading) return <p className="text-gray-400 text-sm p-6">Carregando...</p>
 
-  const qrPx = TAMANHOS_QR[tamanho]
-
   return (
     <div className="max-w-4xl mx-auto py-6 px-4 print:p-0 print:max-w-full">
       <div className="no-print mb-6">
@@ -55,32 +51,18 @@ export default function ImprimirQRCodes() {
           Imprima e recorte, ou mande esse conteúdo pra gráfica.
         </p>
 
-        <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4 flex flex-wrap items-end gap-4">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Colunas por página (A4)</label>
-            <select
-              value={colunas}
-              onChange={(e) => setColunas(Number(e.target.value))}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            >
-              <option value={2}>2 colunas</option>
-              <option value={3}>3 colunas</option>
-              <option value={4}>4 colunas</option>
-              <option value={5}>5 colunas</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Tamanho da etiqueta</label>
-            <select
-              value={tamanho}
-              onChange={(e) => setTamanho(e.target.value)}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            >
-              <option value="pequeno">Pequena</option>
-              <option value="medio">Média</option>
-              <option value="grande">Grande</option>
-            </select>
-          </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+          <label className="block text-xs text-gray-500 mb-1">Colunas por página (A4) — controla o tamanho de tudo</label>
+          <select
+            value={colunas}
+            onChange={(e) => setColunas(Number(e.target.value))}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          >
+            <option value={2}>2 colunas (maior)</option>
+            <option value={3}>3 colunas</option>
+            <option value={4}>4 colunas</option>
+            <option value={5}>5 colunas (menor)</option>
+          </select>
         </div>
 
         <button
@@ -101,7 +83,7 @@ export default function ImprimirQRCodes() {
             <img
               src={qrImagemUrl(urlPublica(a.id))}
               alt={`QR code REF-${a.codigo}`}
-              style={{ width: qrPx, height: qrPx }}
+              style={{ width: '100%', aspectRatio: '1 / 1' }}
               className="mb-2"
             />
             <p className="text-xs font-bold text-gray-800">REF-{a.codigo}</p>
