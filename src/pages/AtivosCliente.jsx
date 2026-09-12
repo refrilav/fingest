@@ -16,6 +16,9 @@ export default function AtivosCliente() {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [editandoId, setEditandoId] = useState(null)
   const [editForm, setEditForm] = useState(ITEM_VAZIO)
+  const [editandoTodos, setEditandoTodos] = useState(false)
+  const [edicoesEmMassa, setEdicoesEmMassa] = useState([])
+  const [salvandoEmMassa, setSalvandoEmMassa] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [maiorCodigoDoCliente, setMaiorCodigoDoCliente] = useState(0)
 
@@ -147,6 +150,79 @@ export default function AtivosCliente() {
     carregar()
   }
 
+  function abrirEdicaoEmMassa() {
+    setEdicoesEmMassa(
+      ativos.map((a) => ({
+        id: a.id,
+        codigo: String(a.codigo ?? ''),
+        local: a.local || '',
+        modelo: a.modelo || '',
+        numero_serie: a.numero_serie || '',
+        equipamento_id: a.equipamento_id || '',
+        intervalo_meses: String(a.intervalo_meses ?? '3'),
+      }))
+    )
+    setEditandoId(null)
+    setEditandoTodos(true)
+  }
+
+  function cancelarEdicaoEmMassa() {
+    setEditandoTodos(false)
+    setEdicoesEmMassa([])
+    setErro(null)
+  }
+
+  function atualizarEdicaoEmMassa(index, campo, valor) {
+    const copia = [...edicoesEmMassa]
+    copia[index] = { ...copia[index], [campo]: valor }
+    setEdicoesEmMassa(copia)
+  }
+
+  async function salvarEdicaoEmMassa() {
+    setSalvandoEmMassa(true)
+    setErro(null)
+
+    // Fase 1: move todo mundo pra um número temporário negativo — evita erro de
+    // duplicidade quando você troca referências entre equipamentos (ex: 1 vira 2 e 2 vira 1)
+    for (let i = 0; i < edicoesEmMassa.length; i++) {
+      const { error } = await supabase.from('ativos').update({ codigo: -(i + 1) }).eq('id', edicoesEmMassa[i].id)
+      if (error) {
+        setErro(error.message)
+        setSalvandoEmMassa(false)
+        return
+      }
+    }
+
+    // Fase 2: aplica os valores definitivos de cada linha
+    for (const item of edicoesEmMassa) {
+      const { error } = await supabase
+        .from('ativos')
+        .update({
+          codigo: Number(item.codigo),
+          local: item.local || null,
+          modelo: item.modelo || null,
+          numero_serie: item.numero_serie || null,
+          equipamento_id: item.equipamento_id || null,
+          intervalo_meses: Number(item.intervalo_meses) || 3,
+        })
+        .eq('id', item.id)
+      if (error) {
+        setErro(
+          error.message.includes('ativos_codigo_cliente_unique_ativo') || error.message.includes('duplicate')
+            ? 'Duas linhas ficaram com a mesma referência. Corrija e clique em salvar de novo.'
+            : error.message
+        )
+        setSalvandoEmMassa(false)
+        return
+      }
+    }
+
+    setSalvandoEmMassa(false)
+    setEditandoTodos(false)
+    setEdicoesEmMassa([])
+    carregar()
+  }
+
   return (
     <div className="max-w-3xl">
       <Link to={`/clientes/${clienteId}`} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4">
@@ -156,7 +232,7 @@ export default function AtivosCliente() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 gap-2">
         <h2 className="text-2xl font-bold text-gray-900">Equipamentos com QR Code</h2>
         <div className="flex gap-2">
-          {ativos.length > 0 && (
+          {ativos.length > 0 && !editandoTodos && (
             <Link
               to={`/clientes/${clienteId}/ativos/qrcodes`}
               className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-200"
@@ -164,12 +240,22 @@ export default function AtivosCliente() {
               <QrCode size={16} /> Imprimir QR codes
             </Link>
           )}
-          <button
-            onClick={() => (mostrarForm ? setMostrarForm(false) : abrirFormulario())}
-            className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700"
-          >
-            <Plus size={16} /> Adicionar
-          </button>
+          {ativos.length > 0 && !editandoTodos && (
+            <button
+              onClick={abrirEdicaoEmMassa}
+              className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-200"
+            >
+              <Pencil size={16} /> Editar equipamentos
+            </button>
+          )}
+          {!editandoTodos && (
+            <button
+              onClick={() => (mostrarForm ? setMostrarForm(false) : abrirFormulario())}
+              className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700"
+            >
+              <Plus size={16} /> Adicionar
+            </button>
+          )}
         </div>
       </div>
       <p className="text-gray-500 text-sm mb-4">
@@ -257,7 +343,67 @@ export default function AtivosCliente() {
         </form>
       )}
 
-      {loading ? (
+      {editandoTodos ? (
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <p className="text-sm font-medium text-gray-700 mb-2">Editando todos os equipamentos</p>
+          <div className="space-y-2 mb-3">
+            {edicoesEmMassa.map((item, i) => (
+              <div key={item.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-gray-50 rounded-lg p-2">
+                <div className="sm:col-span-2 flex items-center gap-1">
+                  <span className="text-xs text-gray-400">REF-</span>
+                  <input
+                    type="number"
+                    value={item.codigo}
+                    onChange={(e) => atualizarEdicaoEmMassa(i, 'codigo', e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                  />
+                </div>
+                <input
+                  value={item.local}
+                  onChange={(e) => atualizarEdicaoEmMassa(i, 'local', e.target.value)}
+                  placeholder="Local"
+                  className="sm:col-span-3 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                />
+                <select
+                  value={item.equipamento_id}
+                  onChange={(e) => atualizarEdicaoEmMassa(i, 'equipamento_id', e.target.value)}
+                  className="sm:col-span-2 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                >
+                  <option value="">Tipo...</option>
+                  {equipamentos.map((eq) => (
+                    <option key={eq.id} value={eq.id}>{eq.nome}</option>
+                  ))}
+                </select>
+                <input
+                  value={item.modelo}
+                  onChange={(e) => atualizarEdicaoEmMassa(i, 'modelo', e.target.value)}
+                  placeholder="Modelo"
+                  className="sm:col-span-3 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                />
+                <input
+                  type="number"
+                  value={item.intervalo_meses}
+                  onChange={(e) => atualizarEdicaoEmMassa(i, 'intervalo_meses', e.target.value)}
+                  placeholder="Meses"
+                  className="sm:col-span-2 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={cancelarEdicaoEmMassa} className="px-4 py-2 text-sm text-gray-500">
+              Cancelar
+            </button>
+            <button
+              onClick={salvarEdicaoEmMassa}
+              disabled={salvandoEmMassa}
+              className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+            >
+              <Check size={16} /> {salvandoEmMassa ? 'Salvando...' : 'Salvar todos'}
+            </button>
+          </div>
+        </div>
+      ) : loading ? (
         <p className="text-gray-400 text-sm">Carregando...</p>
       ) : ativos.length === 0 ? (
         <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 flex flex-col items-center text-center text-gray-400">
