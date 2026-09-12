@@ -13,11 +13,17 @@ function qrImagemUrl(texto) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data=${encodeURIComponent(texto)}`
 }
 
+const TAMANHOS_QR = { pequeno: 96, medio: 128, grande: 160 } // em px
+
 export default function ImprimirQRCodes() {
   const { clienteId } = useParams()
   const [cliente, setCliente] = useState(null)
   const [ativos, setAtivos] = useState([])
   const [loading, setLoading] = useState(true)
+
+  // configuração de impressão (folha A4)
+  const [colunas, setColunas] = useState(3)
+  const [tamanho, setTamanho] = useState('medio')
 
   useEffect(() => {
     async function carregar() {
@@ -35,6 +41,8 @@ export default function ImprimirQRCodes() {
 
   if (loading) return <p className="text-gray-400 text-sm p-6">Carregando...</p>
 
+  const qrPx = TAMANHOS_QR[tamanho]
+
   return (
     <div className="max-w-4xl mx-auto py-6 px-4 print:p-0 print:max-w-full">
       <div className="no-print mb-6">
@@ -46,6 +54,35 @@ export default function ImprimirQRCodes() {
           {ativos.length} etiqueta(s). Cada uma aponta pra uma página pública com o histórico daquele equipamento.
           Imprima e recorte, ou mande esse conteúdo pra gráfica.
         </p>
+
+        <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4 flex flex-wrap items-end gap-4">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Colunas por página (A4)</label>
+            <select
+              value={colunas}
+              onChange={(e) => setColunas(Number(e.target.value))}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value={2}>2 colunas</option>
+              <option value={3}>3 colunas</option>
+              <option value={4}>4 colunas</option>
+              <option value={5}>5 colunas</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Tamanho da etiqueta</label>
+            <select
+              value={tamanho}
+              onChange={(e) => setTamanho(e.target.value)}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="pequeno">Pequena</option>
+              <option value="medio">Média</option>
+              <option value="grande">Grande</option>
+            </select>
+          </div>
+        </div>
+
         <button
           onClick={() => window.print()}
           className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700"
@@ -54,19 +91,28 @@ export default function ImprimirQRCodes() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 print:grid-cols-3">
+      <div
+        className="grid gap-4"
+        style={{ gridTemplateColumns: `repeat(${colunas}, minmax(0, 1fr))` }}
+      >
         {ativos.map((a) => (
           <div key={a.id} className="border border-gray-300 rounded-lg p-3 flex flex-col items-center text-center break-inside-avoid">
-            <img src={qrImagemUrl(urlPublica(a.id))} alt={`QR code REF-${a.codigo}`} className="w-32 h-32 mb-2" />
+            <img src="/logo.png" alt="Refrilav" className="h-8 mb-2 object-contain" />
+            <img
+              src={qrImagemUrl(urlPublica(a.id))}
+              alt={`QR code REF-${a.codigo}`}
+              style={{ width: qrPx, height: qrPx }}
+              className="mb-2"
+            />
             <p className="text-xs font-bold text-gray-800">REF-{a.codigo}</p>
             <p className="text-xs text-gray-600">{a.local || a.equipamentos?.nome || '—'}</p>
-            <p className="text-[10px] text-gray-400 mt-1">Refrilav Assistência Técnica</p>
           </div>
         ))}
       </div>
 
       <style>{`
         @page {
+          size: A4;
           margin: 10mm;
         }
         @media print {
