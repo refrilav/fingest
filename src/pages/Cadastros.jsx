@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Truck, Tags } from 'lucide-react'
+import { ArrowLeft, Truck, Tags, QrCode } from 'lucide-react'
 
 const CARDS = [
   { to: '/fornecedores', label: 'Fornecedores', icon: Truck, color: 'bg-orange-50 text-orange-600' },
   { to: '/categorias', label: 'Categorias e Equipamentos', icon: Tags, color: 'bg-primary-50 text-primary-600' },
+  { to: '/estoque-qrcodes', label: 'Estoque de QR Codes', icon: QrCode, color: 'bg-teal-50 text-teal-600' },
 ]
 
 export default function Cadastros() {
