@@ -15,6 +15,11 @@ function dataPorExtenso(dataISO) {
   return `${dia} de ${MESES[Number(mes) - 1]} de ${ano}`
 }
 
+// junta local + modelo do equipamento cadastrado, caso a descrição manual não tenha sido preenchida
+function descricaoDoAtivo(ativo) {
+  return [ativo?.local, ativo?.modelo].filter(Boolean).join(' — ')
+}
+
 export default function ImprimirLaudo() {
   const { id } = useParams()
   const [laudo, setLaudo] = useState(null)
@@ -26,7 +31,7 @@ export default function ImprimirLaudo() {
       setLoading(true)
       const { data, error } = await supabase
         .from('laudos')
-        .select('*, clientes(nome, documento, endereco, bairro, cidade), laudo_ativos(descricao_equipamento, capacidade_btu, ativos(local, modelo, capacidade_btu))')
+        .select('*, clientes(nome, documento, endereco, bairro, cidade), laudo_ativos(descricao_equipamento, ativos(local, modelo))')
         .eq('id', id)
         .single()
       if (error) {
@@ -103,24 +108,21 @@ export default function ImprimirLaudo() {
         <table className="w-full border border-gray-300 mb-4">
           <tbody>
             <tr>
-              <td colSpan={2} className="border border-gray-300 bg-gray-50 px-2 py-1 font-medium">2 - Relação dos equipamentos</td>
+              <td className="border border-gray-300 bg-gray-50 px-2 py-1 font-medium">2 - Relação dos equipamentos</td>
             </tr>
             <tr className="bg-gray-50 text-xs">
               <td className="border border-gray-300 px-2 py-1 font-medium">Equipamento</td>
-              <td className="border border-gray-300 px-2 py-1 font-medium">Capacidade BTU</td>
             </tr>
             {(laudo.laudo_ativos || []).length === 0 ? (
               <tr>
-                <td className="border border-gray-300 px-2 py-1">—</td>
                 <td className="border border-gray-300 px-2 py-1">—</td>
               </tr>
             ) : (
               laudo.laudo_ativos.map((eq, i) => (
                 <tr key={i}>
                   <td className="border border-gray-300 px-2 py-1">
-                    {eq.descricao_equipamento || eq.ativos?.modelo || '—'}
+                    {eq.descricao_equipamento || descricaoDoAtivo(eq.ativos) || '—'}
                   </td>
-                  <td className="border border-gray-300 px-2 py-1">{eq.capacidade_btu || eq.ativos?.capacidade_btu || '—'}</td>
                 </tr>
               ))
             )}
