@@ -23,6 +23,7 @@ function descricaoDoAtivo(ativo) {
 export default function ImprimirLaudo() {
   const { id } = useParams()
   const [laudo, setLaudo] = useState(null)
+  const [cliente, setCliente] = useState(null)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
 
@@ -31,7 +32,7 @@ export default function ImprimirLaudo() {
       setLoading(true)
       const { data, error } = await supabase
         .from('laudos')
-        .select('*, clientes(nome, documento, endereco, bairro, cidade), laudo_ativos(descricao_equipamento, ativos(local, modelo))')
+        .select('*, laudo_ativos(descricao_equipamento, ativos(local, modelo))')
         .eq('id', id)
         .single()
       if (error) {
@@ -40,8 +41,22 @@ export default function ImprimirLaudo() {
         return
       }
       setLaudo(data)
+
+      // dados do cliente vêm de uma view separada, liberada pro público — a tabela
+      // "clientes" de verdade só pode ser lida por quem está logado no sistema.
+      if (data.cliente_id) {
+        const { data: clienteData } = await supabase
+          .from('clientes_publico_laudo')
+          .select('nome, documento, endereco, bairro, cidade')
+          .eq('id', data.cliente_id)
+          .maybeSingle()
+        setCliente(clienteData)
+        document.title = `Laudo_${clienteData?.nome || 'Refrilav'}`
+      } else {
+        document.title = 'Laudo_Refrilav'
+      }
+
       setLoading(false)
-      document.title = `Laudo_${data.clientes?.nome || 'Refrilav'}`
     }
     carregar()
   }, [id])
@@ -49,8 +64,6 @@ export default function ImprimirLaudo() {
   if (loading) return <p className="text-gray-400 text-sm p-6 text-center">Carregando...</p>
   if (erro) return <p className="text-red-600 text-sm p-6 text-center">{erro}</p>
   if (!laudo) return null
-
-  const cliente = laudo.clientes
 
   return (
     <div className="max-w-2xl mx-auto py-6 px-4 print:p-0 print:max-w-full">
