@@ -63,9 +63,12 @@ export default function PublicoAtivo() {
   if (erro) return <p className="text-red-600 text-sm p-6 text-center">{erro}</p>
   if (!ativo) return null
 
-  // "Próxima higienização" só recalcula depois de Higienização ou Instalação —
-  // uma manutenção corretiva no meio do caminho não deve mexer nessa previsão.
-  const ultimaRelevante = historico.find((h) => h.tipo_servico === 'higienizacao' || h.tipo_servico === 'instalacao')
+  // "Próxima higienização" recalcula depois de Higienização ou Instalação — e também
+  // depois de OS's antigas sem tipo definido (de antes dessa classificação existir).
+  // Só fica de fora quando for marcado de propósito como Manutenção corretiva ou Outro.
+  const ultimaRelevante = historico.find(
+    (h) => !h.tipo_servico || h.tipo_servico === 'higienizacao' || h.tipo_servico === 'instalacao'
+  )
   const proxima = ultimaRelevante?.data_conclusao ? somarMeses(ultimaRelevante.data_conclusao, ativo.intervalo_meses) : null
 
   return (
