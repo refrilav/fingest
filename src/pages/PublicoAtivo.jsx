@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatDateBR } from '../lib/format'
-import { Calendar, User, FileText } from 'lucide-react'
+import { Calendar, User, FileText, Clock } from 'lucide-react'
 
 // Soma meses a uma data 'YYYY-MM-DD' sem usar new Date() pra exibir (convenção do projeto)
 function somarMeses(dataISO, meses) {
@@ -36,7 +36,7 @@ export default function PublicoAtivo() {
     async function carregar() {
       setLoading(true)
       const [ativoRes, histRes, laudosRes] = await Promise.all([
-        supabase.from('ativos').select('codigo, local, modelo, intervalo_meses, equipamentos(nome)').eq('id', id).single(),
+        supabase.from('ativos').select('cliente_id, codigo, local, modelo, intervalo_meses, equipamentos(nome)').eq('id', id).single(),
         supabase
           .from('historico_ativo_publico')
           .select('*')
@@ -62,6 +62,25 @@ export default function PublicoAtivo() {
   if (loading) return <p className="text-gray-400 text-sm p-6 text-center">Carregando...</p>
   if (erro) return <p className="text-red-600 text-sm p-6 text-center">{erro}</p>
   if (!ativo) return null
+
+  if (!ativo.cliente_id) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8 px-4 flex flex-col items-center justify-center text-center">
+        <img src="/logo.png" alt="Refrilav" className="h-14 mb-6" />
+        <div className="bg-white border border-gray-200 rounded-2xl p-6 max-w-sm">
+          <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary-50 mx-auto mb-4">
+            <Clock size={22} className="text-primary-600" />
+          </div>
+          <p className="text-gray-800 font-medium mb-1">Este equipamento ainda está sendo cadastrado</p>
+          <p className="text-sm text-gray-500">
+            Em breve, ao escanear este QR Code, você poderá acompanhar aqui todo o histórico de manutenção deste
+            equipamento — datas, serviços realizados e próxima higienização prevista.
+          </p>
+        </div>
+        <p className="text-xs text-gray-400 text-center mt-6">Refrilav Assistência Técnica</p>
+      </div>
+    )
+  }
 
   // "Próxima higienização" recalcula depois de Higienização ou Instalação — e também
   // depois de OS's antigas sem tipo definido (de antes dessa classificação existir).
