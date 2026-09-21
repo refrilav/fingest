@@ -1,19 +1,39 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { Search } from 'lucide-react'
+import { Search, X, Check } from 'lucide-react'
 
 // tabela de busca é sempre "ativos", filtrado por cliente_id (obrigatório)
-// onSelecionar: (ativo) => void — chamado quando escolhe um equipamento na busca
+// onSelecionar: (ativo) => void — chamado quando escolhe (ou cadastra) um equipamento
 export default function BuscaAtivo({ clienteId, onSelecionar, placeholder }) {
   const [query, setQuery] = useState('')
   const [resultados, setResultados] = useState([])
   const [aberto, setAberto] = useState(false)
+  const [tiposEquipamento, setTiposEquipamento] = useState([])
+  const [criandoNovo, setCriandoNovo] = useState(false)
+  const [novoLocal, setNovoLocal] = useState('')
+  const [novoEquipamentoId, setNovoEquipamentoId] = useState('')
+  const [novoModelo, setNovoModelo] = useState('')
+  const [novoIntervalo, setNovoIntervalo] = useState('3')
+  const [novoBtu, setNovoBtu] = useState('')
+  const [salvandoNovo, setSalvandoNovo] = useState(false)
   const timeoutRef = useRef(null)
   const containerRef = useRef(null)
 
   useEffect(() => {
+    supabase
+      .from('equipamentos')
+      .select('*')
+      .eq('ativo', true)
+      .order('nome')
+      .then(({ data }) => setTiposEquipamento(data || []))
+  }, [])
+
+  useEffect(() => {
     function handleClickFora(e) {
-      if (containerRef.current && !containerRef.current.contains(e.target)) setAberto(false)
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setAberto(false)
+        setCriandoNovo(false)
+      }
     }
     document.addEventListener('mousedown', handleClickFora)
     return () => document.removeEventListener('mousedown', handleClickFora)
@@ -42,6 +62,52 @@ export default function BuscaAtivo({ clienteId, onSelecionar, placeholder }) {
     onSelecionar(ativo)
     setQuery('')
     setAberto(false)
+    setCriandoNovo(false)
+  }
+
+  function abrirCriacao() {
+    setNovoLocal(query.trim())
+    setNovoEquipamentoId('')
+    setNovoModelo('')
+    setNovoIntervalo('3')
+    setNovoBtu('')
+    setCriandoNovo(true)
+  }
+
+  async function salvarNovoAtivo() {
+    if (!novoLocal.trim()) return
+    setSalvandoNovo(true)
+
+    // próximo número de referência livre pra esse cliente
+    const { data: maxRes } = await supabase
+      .from('ativos')
+      .select('codigo')
+      .eq('cliente_id', clienteId)
+      .order('codigo', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const proximoCodigo = (maxRes?.codigo || 0) + 1
+
+    const { data, error } = await supabase
+      .from('ativos')
+      .insert({
+        cliente_id: clienteId,
+        codigo: proximoCodigo,
+        local: novoLocal.trim(),
+        equipamento_id: novoEquipamentoId || null,
+        modelo: novoModelo || null,
+        intervalo_meses: Number(novoIntervalo) || 3,
+        capacidade_btu: novoBtu || null,
+      })
+      .select()
+      .single()
+
+    setSalvandoNovo(false)
+    if (error) {
+      alert(`Não consegui cadastrar o equipamento: ${error.message}`)
+      return
+    }
+    selecionar(data)
   }
 
   if (!clienteId) {
@@ -58,27 +124,107 @@ export default function BuscaAtivo({ clienteId, onSelecionar, placeholder }) {
       <input
         type="text"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          setCriandoNovo(false)
+        }}
         onFocus={() => setAberto(true)}
-        placeholder={placeholder || 'Buscar equipamento pra adicionar...'}
+        placeholder={placeholder || 'Buscar equipamento com QR code, ou cadastrar um novo...'}
         className="w-full rounded-lg border border-gray-300 pl-8 pr-3 py-2 text-sm"
       />
 
       {aberto && (
-        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
-          {resultados.length === 0 ? (
-            <p className="px-3 py-2 text-sm text-gray-400">Nenhum equipamento cadastrado pra esse cliente ainda.</p>
-          ) : (
-            resultados.map((a) => (
+        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
+          {!criandoNovo ? (
+            <>
+              {resultados.length === 0 ? (
+                <p className="px-3 py-2 text-sm text-gray-400">
+                  {query.trim() ? 'Nenhum equipamento encontrado.' : 'Nenhum equipamento cadastrado pra esse cliente ainda.'}
+                </p>
+              ) : (
+                resultados.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => selecionar(a)}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-primary-50 text-gray-700 border-b border-gray-50 last:border-0"
+                  >
+                    <span className="text-xs font-mono text-gray-400">REF-{a.codigo}</span> {a.local || a.modelo || '(sem local)'}
+                  </button>
+                ))
+              )}
               <button
-                key={a.id}
                 type="button"
-                onClick={() => selecionar(a)}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-primary-50 text-gray-700"
+                onClick={abrirCriacao}
+                className="w-full text-left px-3 py-2 text-sm text-primary-700 hover:bg-primary-50 border-t border-gray-100"
               >
-                <span className="text-xs font-mono text-gray-400">REF-{a.codigo}</span> {a.local || a.modelo || '(sem local)'}
+                + Cadastrar novo equipamento (gera QR code)
               </button>
-            ))
+            </>
+          ) : (
+            <div className="p-2 border-t border-gray-100 bg-gray-50">
+              <p className="text-xs text-gray-500 mb-1.5">Novo equipamento pra esse cliente</p>
+              <div className="flex flex-col gap-1.5">
+                <input
+                  type="text"
+                  value={novoLocal}
+                  onChange={(e) => setNovoLocal(e.target.value)}
+                  placeholder="Local (ex: Sala 204) *"
+                  className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                  autoFocus
+                />
+                <select
+                  value={novoEquipamentoId}
+                  onChange={(e) => setNovoEquipamentoId(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                >
+                  <option value="">Tipo de equipamento...</option>
+                  {tiposEquipamento.map((eq) => (
+                    <option key={eq.id} value={eq.id}>{eq.nome}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={novoModelo}
+                  onChange={(e) => setNovoModelo(e.target.value)}
+                  placeholder="Modelo (opcional)"
+                  className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                />
+                <div className="flex gap-1.5">
+                  <input
+                    type="number"
+                    value={novoIntervalo}
+                    onChange={(e) => setNovoIntervalo(e.target.value)}
+                    placeholder="Higienizar a cada (meses)"
+                    className="w-1/2 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={novoBtu}
+                    onChange={(e) => setNovoBtu(e.target.value)}
+                    placeholder="BTU (opcional)"
+                    className="w-1/2 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setCriandoNovo(false)}
+                    className="text-gray-400 hover:text-gray-600 p-1.5"
+                  >
+                    <X size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={salvarNovoAtivo}
+                    disabled={salvandoNovo || !novoLocal.trim()}
+                    className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-2.5 py-1.5 text-xs font-medium hover:bg-primary-700 disabled:opacity-60"
+                  >
+                    <Check size={13} /> Salvar e adicionar
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}
