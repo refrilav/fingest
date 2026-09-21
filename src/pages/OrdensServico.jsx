@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO } from '../lib/format'
@@ -111,6 +111,14 @@ export default function OrdensServico() {
   const [concluindoId, setConcluindoId] = useState(null)
   const [concluirForm, setConcluirForm] = useState(CONCLUIR_VAZIO)
   const [expandidoId, setExpandidoId] = useState(null)
+  const maoDeObraRefs = useRef({})
+  const servicosRefs = useRef({})
+  const [salvoRecente, setSalvoRecente] = useState({}) // { [`${osId}-maoDeObra`]: true }
+
+  function mostrarSalvo(chave) {
+    setSalvoRecente((prev) => ({ ...prev, [chave]: true }))
+    setTimeout(() => setSalvoRecente((prev) => ({ ...prev, [chave]: false })), 1800)
+  }
 
   function alternarExpandido(osId) {
     if (expandidoId === osId) {
@@ -891,13 +899,13 @@ export default function OrdensServico() {
                 {expandidoId === os.id && (
                   <div className="px-4 pb-4 border-t border-gray-100 pt-3">
                 {os.status === 'em_andamento' && (
-                  <div className="mb-2">
+                  <div className="mb-3">
                     {editandoStatusId === os.id ? (
-                      <div className="flex flex-wrap items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
                         <select
                           value={statusAtualForm.opcao}
                           onChange={(e) => setStatusAtualForm({ ...statusAtualForm, opcao: e.target.value })}
-                          className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                         >
                           {STATUS_ATUAL_OPCOES.map((op) => (
                             <option key={op} value={op}>{op}</option>
@@ -908,7 +916,7 @@ export default function OrdensServico() {
                             value={statusAtualForm.texto}
                             onChange={(e) => setStatusAtualForm({ ...statusAtualForm, texto: e.target.value })}
                             placeholder="Descreva o status..."
-                            className="rounded-lg border border-gray-300 px-2 py-1 text-xs flex-1 min-w-[140px]"
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                           />
                         )}
                         {statusAtualForm.opcao === 'Agendado' && (
@@ -916,25 +924,30 @@ export default function OrdensServico() {
                             type="datetime-local"
                             value={statusAtualForm.dataAgendamento}
                             onChange={(e) => setStatusAtualForm({ ...statusAtualForm, dataAgendamento: e.target.value })}
-                            className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                           />
                         )}
-                        <button
-                          onClick={() => salvarStatusAtual(os.id)}
-                          className="rounded-lg bg-amber-600 text-white px-3 py-1 text-xs font-medium hover:bg-amber-700"
-                        >
-                          Salvar
-                        </button>
-                        <button onClick={() => setEditandoStatusId(null)} className="text-xs text-gray-500 px-2">
-                          Cancelar
-                        </button>
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            onClick={() => salvarStatusAtual(os.id)}
+                            className="flex-1 rounded-lg bg-amber-600 text-white py-2 text-sm font-medium hover:bg-amber-700"
+                          >
+                            Salvar
+                          </button>
+                          <button
+                            onClick={() => setEditandoStatusId(null)}
+                            className="rounded-lg bg-white border border-gray-300 text-gray-600 px-4 py-2 text-sm"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       <button
                         onClick={() => abrirEdicaoStatus(os)}
-                        className="flex items-center gap-1 text-xs bg-amber-50 text-amber-700 px-2.5 py-1 rounded-full hover:bg-amber-100"
+                        className="flex items-center gap-1.5 text-sm bg-amber-50 text-amber-700 px-3 py-2 rounded-lg hover:bg-amber-100 w-full sm:w-auto"
                       >
-                        <Wrench size={12} />
+                        <Wrench size={14} />
                         {os.status_atual || 'Definir status atual...'}
                       </button>
                     )}
@@ -942,86 +955,119 @@ export default function OrdensServico() {
                 )}
 
                 {(os.status === 'em_andamento' || os.status === 'finalizada') && (os.ordens_servico_pecas || []).length > 0 && (
-                  <div className="mb-2 bg-gray-50 border border-gray-100 rounded-lg p-2">
-                    <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1 flex items-center gap-1">
+                  <div className="mb-3 bg-gray-50 border border-gray-100 rounded-lg p-2">
+                    <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
                       <Package size={11} /> Peças usadas
                     </p>
-                    <ul className="space-y-1">
+                    <ul className="space-y-2">
                       {os.ordens_servico_pecas.map((item) => (
-                        <li key={item.id} className="flex items-center gap-2 text-xs">
-                          <span className="flex-1 text-gray-700">{item.nome_peca}</span>
+                        <li key={item.id} className="bg-white rounded-lg border border-gray-200 p-2">
                           {os.status === 'em_andamento' ? (
                             <>
-                              <input
-                                type="number"
-                                step="0.01"
-                                defaultValue={item.quantidade}
-                                onBlur={(e) => {
-                                  const novaQtd = Number(e.target.value) || 0
-                                  if (novaQtd !== Number(item.quantidade)) atualizarItemPeca(item, novaQtd, Number(item.valor_unitario))
-                                }}
-                                className="w-14 rounded border border-gray-300 px-1 py-0.5 text-right"
-                              />
-                              <span className="text-gray-400">×</span>
-                              <input
-                                type="number"
-                                step="0.01"
-                                defaultValue={item.valor_unitario}
-                                onBlur={(e) => {
-                                  const novoValor = Number(e.target.value) || 0
-                                  if (novoValor !== Number(item.valor_unitario)) atualizarItemPeca(item, Number(item.quantidade), novoValor)
-                                }}
-                                className="w-20 rounded border border-gray-300 px-1 py-0.5 text-right"
-                              />
-                              <span className="w-20 text-right text-gray-600">
-                                {formatCurrencyBRL(Number(item.quantidade) * Number(item.valor_unitario))}
-                              </span>
-                              <button onClick={() => removerItemPeca(item)} className="text-gray-400 hover:text-red-600">
-                                <X size={13} />
-                              </button>
+                              <div className="flex items-center justify-between gap-2 mb-1.5">
+                                <span className="flex-1 text-sm text-gray-700">{item.nome_peca}</span>
+                                <button
+                                  onClick={() => removerItemPeca(item)}
+                                  className="text-gray-400 hover:text-red-600 p-1.5 -my-1.5 -mr-1.5"
+                                >
+                                  <X size={16} />
+                                </button>
+                              </div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  defaultValue={item.quantidade}
+                                  onBlur={(e) => {
+                                    const novaQtd = Number(e.target.value) || 0
+                                    if (novaQtd !== Number(item.quantidade)) atualizarItemPeca(item, novaQtd, Number(item.valor_unitario))
+                                  }}
+                                  className="w-16 rounded-lg border border-gray-300 px-2 py-2 text-sm text-right"
+                                />
+                                <span className="text-gray-400 text-sm">×</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  defaultValue={item.valor_unitario}
+                                  onBlur={(e) => {
+                                    const novoValor = Number(e.target.value) || 0
+                                    if (novoValor !== Number(item.valor_unitario)) atualizarItemPeca(item, Number(item.quantidade), novoValor)
+                                  }}
+                                  className="w-24 rounded-lg border border-gray-300 px-2 py-2 text-sm text-right"
+                                />
+                                <span className="ml-auto text-sm font-medium text-gray-700">
+                                  {formatCurrencyBRL(Number(item.quantidade) * Number(item.valor_unitario))}
+                                </span>
+                              </div>
                             </>
                           ) : (
-                            <span className="text-gray-500">
-                              {item.quantidade} × {formatCurrencyBRL(item.valor_unitario)} ={' '}
-                              <span className="font-medium text-gray-700">
-                                {formatCurrencyBRL(Number(item.quantidade) * Number(item.valor_unitario))}
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-gray-700">{item.nome_peca}</span>
+                              <span className="text-gray-500">
+                                {item.quantidade} × {formatCurrencyBRL(item.valor_unitario)} ={' '}
+                                <span className="font-medium text-gray-700">
+                                  {formatCurrencyBRL(Number(item.quantidade) * Number(item.valor_unitario))}
+                                </span>
                               </span>
-                            </span>
+                            </div>
                           )}
                         </li>
                       ))}
                     </ul>
-                    <p className="text-xs text-right font-medium text-gray-700 mt-1">Total peças: {formatCurrencyBRL(totalPecas)}</p>
+                    <p className="text-xs text-right font-medium text-gray-700 mt-2">Total peças: {formatCurrencyBRL(totalPecas)}</p>
                   </div>
                 )}
 
                 {os.status === 'em_andamento' && (
-                  <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="mb-3 space-y-3">
                     <div>
-                      <label className="block text-[11px] text-gray-400 mb-0.5">Valor da mão de obra</label>
+                      <label className="block text-xs text-gray-500 mb-1">Valor da mão de obra</label>
                       <input
+                        ref={(el) => (maoDeObraRefs.current[os.id] = el)}
                         type="number"
                         step="0.01"
+                        inputMode="decimal"
                         placeholder="R$ 0,00"
                         defaultValue={os.valor_mao_de_obra ?? ''}
-                        onBlur={(e) => {
-                          const novo = e.target.value === '' ? null : Number(e.target.value)
-                          if (novo !== (os.valor_mao_de_obra ?? null)) salvarMaoDeObra(os, novo)
-                        }}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
                       />
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <button
+                          onClick={() => {
+                            const el = maoDeObraRefs.current[os.id]
+                            const novo = el.value === '' ? null : Number(el.value)
+                            salvarMaoDeObra(os, novo)
+                            mostrarSalvo(`${os.id}-mao`)
+                          }}
+                          className="rounded-lg bg-gray-100 text-gray-700 px-4 py-1.5 text-xs font-medium hover:bg-gray-200"
+                        >
+                          Salvar
+                        </button>
+                        {salvoRecente[`${os.id}-mao`] && <span className="text-xs text-green-600">✓ Salvo</span>}
+                      </div>
                     </div>
                     <div>
-                      <label className="block text-[11px] text-gray-400 mb-0.5">Serviços realizados</label>
+                      <label className="block text-xs text-gray-500 mb-1">Serviços realizados</label>
                       <textarea
+                        ref={(el) => (servicosRefs.current[os.id] = el)}
                         placeholder={'Ex: troca do compressor\nlimpeza dos filtros\n(um item por linha, se quiser)'}
                         defaultValue={os.servicos_realizados ?? ''}
                         rows={3}
-                        onBlur={(e) => {
-                          if (e.target.value !== (os.servicos_realizados || '')) salvarServicosRealizados(os, e.target.value)
-                        }}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm resize-y"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm resize-y"
                       />
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <button
+                          onClick={() => {
+                            const el = servicosRefs.current[os.id]
+                            salvarServicosRealizados(os, el.value)
+                            mostrarSalvo(`${os.id}-serv`)
+                          }}
+                          className="rounded-lg bg-gray-100 text-gray-700 px-4 py-1.5 text-xs font-medium hover:bg-gray-200"
+                        >
+                          Salvar
+                        </button>
+                        {salvoRecente[`${os.id}-serv`] && <span className="text-xs text-green-600">✓ Salvo</span>}
+                      </div>
                     </div>
                   </div>
                 )}
