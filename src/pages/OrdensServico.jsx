@@ -153,8 +153,15 @@ export default function OrdensServico() {
 
   useEffect(() => {
     const idParaAbrir = searchParams.get('abrir')
-    if (idParaAbrir && lista.some((os) => os.id === idParaAbrir)) {
-      setExpandidoId(idParaAbrir)
+    const osAlvo = lista.find((os) => os.id === idParaAbrir)
+    if (osAlvo) {
+      if (osAlvo.status === 'finalizada' || osAlvo.status === 'cancelada') {
+        setMostrarHistorico(true)
+      }
+      setExpandidoId(osAlvo.id)
+      setTimeout(() => {
+        document.getElementById(`os-${osAlvo.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 100)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lista])

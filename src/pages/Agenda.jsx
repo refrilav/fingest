@@ -149,6 +149,15 @@ export default function Agenda() {
     setCriando(true)
   }
 
+  async function handleClienteSelecionado(clienteId) {
+    setForm((f) => ({ ...f, cliente_id: clienteId }))
+    if (!clienteId) return
+    const { data } = await supabase.from('clientes').select('endereco').eq('id', clienteId).single()
+    if (data?.endereco) {
+      setForm((f) => (f.endereco ? f : { ...f, endereco: data.endereco, mostrarMais: true }))
+    }
+  }
+
   function fecharCriacao() {
     setCriando(false)
     setForm(CRIAR_VAZIO)
@@ -414,7 +423,7 @@ export default function Agenda() {
                     <BuscaPessoa
                       tabela="clientes"
                       value={form.cliente_id}
-                      onChange={(id) => setForm({ ...form, cliente_id: id })}
+                      onChange={handleClienteSelecionado}
                       placeholder="Digite para buscar..."
                     />
                   </div>
