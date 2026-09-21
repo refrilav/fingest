@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO } from '../lib/format'
 import BuscaPessoa from '../components/BuscaPessoa'
@@ -91,6 +91,7 @@ function unidadeGarantia(qtd, unidade) {
 }
 
 export default function OrdensServico() {
+  const [searchParams] = useSearchParams()
   const [lista, setLista] = useState([])
   const [equipamentos, setEquipamentos] = useState([])
   const [categorias, setCategorias] = useState([])
@@ -156,6 +157,14 @@ export default function OrdensServico() {
   useEffect(() => {
     carregar()
   }, [])
+
+  useEffect(() => {
+    const idParaAbrir = searchParams.get('abrir')
+    if (idParaAbrir && lista.some((os) => os.id === idParaAbrir)) {
+      setExpandidoId(idParaAbrir)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lista])
 
   function cancelarFormulario() {
     setForm(CAMPOS_VAZIOS)

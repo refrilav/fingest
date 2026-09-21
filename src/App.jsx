@@ -37,6 +37,7 @@ import Financeiro from './pages/Financeiro'
 import Cadastros from './pages/Cadastros'
 import EstoqueQRCodes from './pages/EstoqueQRCodes'
 import ImprimirQRCodesEstoque from './pages/ImprimirQRCodesEstoque'
+import Agenda from './pages/Agenda'
 
 function RotaProtegida({ children }) {
   const { session, loading } = useAuth()
@@ -132,7 +133,8 @@ function Rotas() {
           </RotaProtegida>
         }
       >
-        <Route index element={<Home />} />
+        <Route index element={<Agenda />} />
+        <Route path="menu" element={<Home />} />
         <Route path="financeiro" element={<Financeiro />} />
         <Route path="cadastros" element={<Cadastros />} />
         <Route path="ordens-servico" element={<OrdensServico />} />
