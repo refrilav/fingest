@@ -64,9 +64,11 @@ const CONCLUIR_VAZIO = {
   garantiaReferenciaCustom: '',
   modoValor: 'detalhado',
   valorFechado: '',
-  faturamento: 'agora', // 'agora' | 'acumular'
   dataConclusao: todayISO(),
   tecnico: '',
+  finalizarComo: 'depois', // 'depois' | 'pago' | 'acumular'
+  contaBancariaId: '',
+  formaPagamento: 'Pix',
 }
 const OPCOES_REFERENCIA_GARANTIA = ['do serviço', 'da instalação', 'da peça', 'do equipamento', 'Outro...']
 
@@ -97,9 +99,11 @@ export default function OrdensServico() {
   const [mostrarListaAtivos, setMostrarListaAtivos] = useState(false)
   const [ativosDoCliente, setAtivosDoCliente] = useState([])
 
-  const [concluindoId, setConcluindoId] = useState(null)
+  const [mostrarFinalizar, setMostrarFinalizar] = useState(null)
   const [concluirForm, setConcluirForm] = useState(CONCLUIR_VAZIO)
   const [expandidoId, setExpandidoId] = useState(null)
+  const [contas, setContas] = useState([])
+  const [pecaManual, setPecaManual] = useState({}) // { [osId]: { aberto, nome, valor } }
   const maoDeObraRefs = useRef({})
   const servicosRefs = useRef({})
   const [salvoRecente, setSalvoRecente] = useState({}) // { [`${osId}-maoDeObra`]: true }
@@ -109,25 +113,40 @@ export default function OrdensServico() {
     setTimeout(() => setSalvoRecente((prev) => ({ ...prev, [chave]: false })), 1800)
   }
 
-  function alternarExpandido(osId) {
-    if (expandidoId === osId) {
+  function prepararConclusao(os) {
+    setConcluirForm({
+      ...CONCLUIR_VAZIO,
+      categoria_id: os.categoria_id || '',
+      valor_mao_de_obra: os.valor_mao_de_obra != null ? String(os.valor_mao_de_obra) : '',
+      garantia_dias: os.garantia_dias != null ? String(os.garantia_dias) : '',
+      garantia_unidade: os.garantia_unidade || 'dias',
+      garantia_referencia: os.garantia_referencia || 'do serviço',
+      dataConclusao: os.data_conclusao || todayISO(),
+      tecnico: os.tecnico || '',
+    })
+  }
+
+  function alternarExpandido(os) {
+    if (expandidoId === os.id) {
       setExpandidoId(null)
     } else {
-      setExpandidoId(osId)
-      setConcluindoId(null)
+      setExpandidoId(os.id)
+      setMostrarFinalizar(null)
+      if (os.status === 'nao_iniciada' || os.status === 'em_andamento') prepararConclusao(os)
     }
   }
 
-  function abrirDaOficina(osId) {
-    setExpandidoId(osId)
+  function abrirDaOficina(os) {
+    setExpandidoId(os.id)
+    prepararConclusao(os)
     setTimeout(() => {
-      document.getElementById(`os-${osId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      document.getElementById(`os-${os.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }, 50)
   }
 
   async function carregar() {
     setLoading(true)
-    const [os, equips, cats, cent] = await Promise.all([
+    const [os, equips, cats, cent, contasRes] = await Promise.all([
       supabase
         .from('ordens_servico')
         .select(
@@ -138,12 +157,14 @@ export default function OrdensServico() {
       supabase.from('equipamentos').select('*').eq('ativo', true).order('nome').range(0, 9999),
       supabase.from('categorias').select('*').eq('tipo', 'receita').eq('ativo', true).order('nome').range(0, 9999),
       supabase.from('centros_de_custo').select('*').eq('ativo', true).order('nome').range(0, 9999),
+      supabase.from('contas_bancarias').select('*').eq('ativo', true).order('nome').range(0, 9999),
     ])
     if (os.error) setErro(os.error.message)
     else setLista(os.data)
     setEquipamentos(equips.data || [])
     setCategorias(cats.data || [])
     setCentros(cent.data || [])
+    setContas(contasRes.data || [])
     setLoading(false)
   }
 
@@ -157,6 +178,8 @@ export default function OrdensServico() {
     if (osAlvo) {
       if (osAlvo.status === 'finalizada' || osAlvo.status === 'cancelada') {
         setMostrarHistorico(true)
+      } else {
+        prepararConclusao(osAlvo)
       }
       setExpandidoId(osAlvo.id)
       setTimeout(() => {
@@ -356,6 +379,35 @@ export default function OrdensServico() {
     carregar()
   }
 
+  function abrirPecaManual(osId) {
+    setPecaManual((prev) => ({ ...prev, [osId]: { aberto: true, nome: '', valor: '' } }))
+  }
+
+  function atualizarPecaManual(osId, campo, valor) {
+    setPecaManual((prev) => ({ ...prev, [osId]: { ...prev[osId], [campo]: valor } }))
+  }
+
+  async function confirmarPecaManual(os) {
+    const dados = pecaManual[os.id]
+    if (!dados?.nome?.trim()) {
+      setErro('Digite o nome da peça.')
+      return
+    }
+    const { error } = await supabase.from('ordens_servico_pecas').insert({
+      ordem_servico_id: os.id,
+      peca_id: null,
+      nome_peca: dados.nome.trim(),
+      quantidade: 1,
+      valor_unitario: Number(dados.valor) || 0,
+    })
+    if (error) {
+      setErro(error.message)
+      return
+    }
+    setPecaManual((prev) => ({ ...prev, [os.id]: { aberto: false, nome: '', valor: '' } }))
+    carregar()
+  }
+
   async function atualizarItemPeca(item, novaQuantidade, novoValor) {
     const diferenca = novaQuantidade - Number(item.quantidade)
     const { error: e1 } = await supabase
@@ -417,22 +469,6 @@ export default function OrdensServico() {
 
   // ---------- Conclusão ----------
 
-  function abrirConclusao(os) {
-    setConcluindoId(os.id)
-    setConcluirForm({
-      categoria_id: os.categoria_id || '',
-      valor_mao_de_obra: os.valor_mao_de_obra != null ? String(os.valor_mao_de_obra) : '',
-      garantia_dias: os.garantia_dias != null ? String(os.garantia_dias) : '',
-      garantia_unidade: os.garantia_unidade || 'dias',
-      garantia_referencia: os.garantia_referencia || 'do serviço',
-      modoValor: 'detalhado',
-      valorFechado: '',
-      faturamento: 'agora',
-      dataConclusao: os.data_conclusao || todayISO(),
-      tecnico: os.tecnico || '',
-    })
-  }
-
   function totalPecasDaOS(os) {
     return (os.ordens_servico_pecas || []).reduce((acc, i) => acc + Number(i.quantidade) * Number(i.valor_unitario), 0)
   }
@@ -455,6 +491,10 @@ export default function OrdensServico() {
       setErro('Informe a data de conclusão do serviço.')
       return
     }
+    if (concluirForm.finalizarComo === 'pago' && !concluirForm.contaBancariaId) {
+      setErro('Selecione em qual conta bancária o pagamento entrou.')
+      return
+    }
 
     const dataConclusao = concluirForm.dataConclusao
     const nomeCliente = os.clientes?.nome || 'Cliente não identificado'
@@ -465,21 +505,31 @@ export default function OrdensServico() {
 
     let lancamentoId = null
 
-    if (concluirForm.faturamento === 'agora') {
+    if (concluirForm.finalizarComo !== 'acumular') {
+      const payloadLancamento = {
+        tipo: 'receber',
+        descricao: descricaoLancamento,
+        valor: valorFinal,
+        data_vencimento: dataConclusao,
+        data_competencia: dataConclusao,
+        categoria_id: concluirForm.categoria_id || null,
+        centro_custo_id: os.centro_custo_id || null,
+        cliente_id: os.cliente_id || null,
+        equipamento_id: os.equipamento_id || null,
+        observacoes: `Gerado automaticamente pela conclusão da OS #${os.numero} (concluída em ${dataConclusao}). ${detalheValores}`,
+      }
+
+      if (concluirForm.finalizarComo === 'pago') {
+        payloadLancamento.status = 'pago'
+        payloadLancamento.valor_pago = valorFinal
+        payloadLancamento.data_pagamento = dataConclusao
+        payloadLancamento.conta_bancaria_id = concluirForm.contaBancariaId
+        payloadLancamento.forma_pagamento = concluirForm.formaPagamento
+      }
+
       const { data: novoLancamento, error: erroLancamento } = await supabase
         .from('lancamentos')
-        .insert({
-          tipo: 'receber',
-          descricao: descricaoLancamento,
-          valor: valorFinal,
-          data_vencimento: dataConclusao,
-          data_competencia: dataConclusao,
-          categoria_id: concluirForm.categoria_id || null,
-          centro_custo_id: os.centro_custo_id || null,
-          cliente_id: os.cliente_id || null,
-          equipamento_id: os.equipamento_id || null,
-          observacoes: `Gerado automaticamente pela conclusão da OS #${os.numero} (concluída em ${dataConclusao}). ${detalheValores}`,
-        })
+        .insert(payloadLancamento)
         .select()
         .single()
 
@@ -514,7 +564,7 @@ export default function OrdensServico() {
       return
     }
 
-    setConcluindoId(null)
+    setMostrarFinalizar(null)
     carregar()
   }
 
@@ -799,7 +849,7 @@ export default function OrdensServico() {
             {listaNaOficina.map((os) => (
               <li key={os.id} className="flex items-center justify-between gap-2 bg-white rounded-lg px-3 py-2">
                 <button
-                  onClick={() => abrirDaOficina(os.id)}
+                  onClick={() => abrirDaOficina(os)}
                   className="flex-1 text-left text-sm text-blue-900 min-w-0 truncate"
                 >
                   <span className="font-mono text-xs text-blue-400">OS #{os.numero}</span>{' '}
@@ -852,7 +902,7 @@ export default function OrdensServico() {
                   return (
               <li id={`os-${os.id}`} key={os.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                 <button
-                  onClick={() => alternarExpandido(os.id)}
+                  onClick={() => alternarExpandido(os)}
                   className="w-full text-left p-4 hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
@@ -936,6 +986,76 @@ export default function OrdensServico() {
                   </div>
                 )}
 
+                {emAberto && (
+                  <div className="mb-3">
+                    <label className="block text-xs text-gray-500 mb-1">Serviços realizados</label>
+                    <textarea
+                      ref={(el) => (servicosRefs.current[os.id] = el)}
+                      placeholder={'Ex: troca do compressor\nlimpeza dos filtros\n(um item por linha, se quiser)'}
+                      defaultValue={os.servicos_realizados ?? ''}
+                      rows={3}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm resize-y"
+                    />
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <button
+                        onClick={() => {
+                          const el = servicosRefs.current[os.id]
+                          salvarServicosRealizados(os, el.value)
+                          mostrarSalvo(`${os.id}-serv`)
+                        }}
+                        className="rounded-lg bg-gray-100 text-gray-700 px-4 py-1.5 text-xs font-medium hover:bg-gray-200"
+                      >
+                        Salvar
+                      </button>
+                      {salvoRecente[`${os.id}-serv`] && <span className="text-xs text-green-600">✓ Salvo</span>}
+                    </div>
+                  </div>
+                )}
+
+                {emAberto && (
+                  <div className="mb-3">
+                    <label className="block text-xs text-gray-500 mb-1">Peças utilizadas</label>
+                    <BuscaPeca onSelecionar={(peca) => adicionarPeca(os, peca)} placeholder="Buscar peça do estoque..." />
+                    {!pecaManual[os.id]?.aberto ? (
+                      <button
+                        onClick={() => abrirPecaManual(os.id)}
+                        className="flex items-center gap-1 text-xs text-primary-700 hover:bg-primary-50 rounded-lg px-2 py-1.5 mt-1.5"
+                      >
+                        <Plus size={13} /> Adicionar peça manualmente
+                      </button>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2 mt-1.5 bg-gray-50 rounded-lg p-2">
+                        <input
+                          placeholder="Nome da peça"
+                          value={pecaManual[os.id]?.nome || ''}
+                          onChange={(e) => atualizarPecaManual(os.id, 'nome', e.target.value)}
+                          className="flex-1 min-w-[140px] rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                        />
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="Valor"
+                          value={pecaManual[os.id]?.valor || ''}
+                          onChange={(e) => atualizarPecaManual(os.id, 'valor', e.target.value)}
+                          className="w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-right"
+                        />
+                        <button
+                          onClick={() => confirmarPecaManual(os)}
+                          className="rounded-lg bg-primary-600 text-white px-3 py-1.5 text-xs font-medium hover:bg-primary-700"
+                        >
+                          Adicionar
+                        </button>
+                        <button
+                          onClick={() => setPecaManual((prev) => ({ ...prev, [os.id]: { aberto: false, nome: '', valor: '' } }))}
+                          className="text-gray-400 hover:text-red-600 p-1"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {(emAberto || os.status === 'finalizada') && (os.ordens_servico_pecas || []).length > 0 && (
                   <div className="mb-3 bg-gray-50 border border-gray-100 rounded-lg p-2">
                     <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
@@ -1001,157 +1121,87 @@ export default function OrdensServico() {
                 )}
 
                 {emAberto && (
-                  <div className="mb-3 space-y-3">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">Valor da mão de obra</label>
-                      <input
-                        ref={(el) => (maoDeObraRefs.current[os.id] = el)}
-                        type="number"
-                        step="0.01"
-                        inputMode="decimal"
-                        placeholder="R$ 0,00"
-                        defaultValue={os.valor_mao_de_obra ?? ''}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
-                      />
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <button
-                          onClick={() => {
-                            const el = maoDeObraRefs.current[os.id]
-                            const novo = el.value === '' ? null : Number(el.value)
-                            salvarMaoDeObra(os, novo)
-                            mostrarSalvo(`${os.id}-mao`)
-                          }}
-                          className="rounded-lg bg-gray-100 text-gray-700 px-4 py-1.5 text-xs font-medium hover:bg-gray-200"
-                        >
-                          Salvar
-                        </button>
-                        {salvoRecente[`${os.id}-mao`] && <span className="text-xs text-green-600">✓ Salvo</span>}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">Serviços realizados</label>
-                      <textarea
-                        ref={(el) => (servicosRefs.current[os.id] = el)}
-                        placeholder={'Ex: troca do compressor\nlimpeza dos filtros\n(um item por linha, se quiser)'}
-                        defaultValue={os.servicos_realizados ?? ''}
-                        rows={3}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm resize-y"
-                      />
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <button
-                          onClick={() => {
-                            const el = servicosRefs.current[os.id]
-                            salvarServicosRealizados(os, el.value)
-                            mostrarSalvo(`${os.id}-serv`)
-                          }}
-                          className="rounded-lg bg-gray-100 text-gray-700 px-4 py-1.5 text-xs font-medium hover:bg-gray-200"
-                        >
-                          Salvar
-                        </button>
-                        {salvoRecente[`${os.id}-serv`] && <span className="text-xs text-green-600">✓ Salvo</span>}
-                      </div>
+                  <div className="mb-3">
+                    <label className="block text-xs text-gray-500 mb-1">Valor da mão de obra</label>
+                    <input
+                      ref={(el) => (maoDeObraRefs.current[os.id] = el)}
+                      type="number"
+                      step="0.01"
+                      inputMode="decimal"
+                      placeholder="R$ 0,00"
+                      defaultValue={os.valor_mao_de_obra ?? ''}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
+                    />
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <button
+                        onClick={() => {
+                          const el = maoDeObraRefs.current[os.id]
+                          const novo = el.value === '' ? null : Number(el.value)
+                          salvarMaoDeObra(os, novo)
+                          setConcluirForm((f) => ({ ...f, valor_mao_de_obra: el.value }))
+                          mostrarSalvo(`${os.id}-mao`)
+                        }}
+                        className="rounded-lg bg-gray-100 text-gray-700 px-4 py-1.5 text-xs font-medium hover:bg-gray-200"
+                      >
+                        Salvar
+                      </button>
+                      {salvoRecente[`${os.id}-mao`] && <span className="text-xs text-green-600">✓ Salvo</span>}
                     </div>
                   </div>
                 )}
 
                 {emAberto && (
-                  <div className="mb-3">
-                    <BuscaPeca onSelecionar={(peca) => adicionarPeca(os, peca)} placeholder="Adicionar peça usada..." />
-                  </div>
-                )}
-
-                {concluindoId === os.id && (
-                  <div className="mb-3 bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="mb-3 bg-gray-50 border border-gray-100 rounded-lg p-3">
                     <div className="flex gap-2 bg-white rounded-lg p-1 mb-2 border border-gray-200">
                       <button
                         type="button"
                         onClick={() => setConcluirForm({ ...concluirForm, modoValor: 'detalhado' })}
                         className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${
-                          concluirForm.modoValor === 'detalhado' ? 'bg-green-600 text-white' : 'text-gray-500'
+                          concluirForm.modoValor === 'detalhado' ? 'bg-primary-600 text-white' : 'text-gray-500'
                         }`}
                       >
-                        Peças + mão de obra
+                        Discriminar peças + mão de obra
                       </button>
                       <button
                         type="button"
                         onClick={() => setConcluirForm({ ...concluirForm, modoValor: 'fechado' })}
                         className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${
-                          concluirForm.modoValor === 'fechado' ? 'bg-green-600 text-white' : 'text-gray-500'
+                          concluirForm.modoValor === 'fechado' ? 'bg-primary-600 text-white' : 'text-gray-500'
                         }`}
                       >
-                        Valor fechado
+                        Só valor total (fechado)
                       </button>
                     </div>
 
-                    <div className="mb-2 flex flex-wrap gap-2">
-                      <div>
-                        <label className="block text-[11px] text-green-800 mb-0.5">Data em que o serviço foi concluído</label>
-                        <input
-                          type="date"
-                          value={concluirForm.dataConclusao}
-                          onChange={(e) => setConcluirForm({ ...concluirForm, dataConclusao: e.target.value })}
-                          className="w-full sm:w-48 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] text-green-800 mb-0.5">Técnico responsável (opcional)</label>
-                        <input
-                          type="text"
-                          value={concluirForm.tecnico}
-                          onChange={(e) => setConcluirForm({ ...concluirForm, tecnico: e.target.value })}
-                          placeholder="Ex: Diego"
-                          className="w-full sm:w-48 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                        />
-                      </div>
-                    </div>
+                    {concluirForm.modoValor === 'fechado' && (
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Valor total"
+                        value={concluirForm.valorFechado}
+                        onChange={(e) => setConcluirForm({ ...concluirForm, valorFechado: e.target.value })}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mb-2"
+                      />
+                    )}
 
-                    <div className="flex gap-2 bg-white rounded-lg p-1 mb-2 border border-gray-200">
-                      <button
-                        type="button"
-                        onClick={() => setConcluirForm({ ...concluirForm, faturamento: 'agora' })}
-                        className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${
-                          concluirForm.faturamento === 'agora' ? 'bg-blue-600 text-white' : 'text-gray-500'
-                        }`}
-                      >
-                        Cobrar agora
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConcluirForm({ ...concluirForm, faturamento: 'acumular' })}
-                        className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${
-                          concluirForm.faturamento === 'acumular' ? 'bg-blue-600 text-white' : 'text-gray-500'
-                        }`}
-                      >
-                        Acumular p/ cobrar depois
-                      </button>
-                    </div>
-                    {concluirForm.faturamento === 'acumular' && (
-                      <p className="text-xs text-blue-700 mb-2">
-                        A OS fica finalizada com o valor registrado, mas <strong>não</strong> cria conta a receber
-                        agora. Depois, na tela do cliente, você junta várias OS's e gera uma cobrança consolidada.
+                    {concluirForm.modoValor === 'detalhado' ? (
+                      <p className="text-sm text-gray-700 mb-2">
+                        Peças: <strong>{formatCurrencyBRL(totalPecas)}</strong> + Mão de obra:{' '}
+                        <strong>{formatCurrencyBRL(Number(concluirForm.valor_mao_de_obra) || 0)}</strong> = Total:{' '}
+                        <strong>{formatCurrencyBRL(totalPecas + (Number(concluirForm.valor_mao_de_obra) || 0))}</strong>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-gray-700 mb-2">
+                        Valor total: <strong>{formatCurrencyBRL(Number(concluirForm.valorFechado) || 0)}</strong>
+                        {totalPecas > 0 && (
+                          <span className="text-gray-500 text-xs block">
+                            (as peças usadas ficam registradas no estoque normalmente, sem afetar esse valor)
+                          </span>
+                        )}
                       </p>
                     )}
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
-                      {concluirForm.modoValor === 'detalhado' ? (
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="Valor da mão de obra"
-                          value={concluirForm.valor_mao_de_obra}
-                          onChange={(e) => setConcluirForm({ ...concluirForm, valor_mao_de_obra: e.target.value })}
-                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                        />
-                      ) : (
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="Valor total"
-                          value={concluirForm.valorFechado}
-                          onChange={(e) => setConcluirForm({ ...concluirForm, valorFechado: e.target.value })}
-                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                        />
-                      )}
                       <SelectCategoria
                         tipo="receita"
                         categorias={categorias}
@@ -1162,46 +1212,54 @@ export default function OrdensServico() {
                           setConcluirForm((f) => ({ ...f, categoria_id: nova.id }))
                         }}
                       />
-                      <div className="col-span-1 sm:col-span-2 flex gap-2">
-                        <input
-                          type="number"
-                          placeholder="Garantia (opcional)"
-                          value={concluirForm.garantia_dias}
-                          onChange={(e) => setConcluirForm({ ...concluirForm, garantia_dias: e.target.value })}
-                          className="w-24 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                        />
-                        <select
-                          value={concluirForm.garantia_unidade}
-                          onChange={(e) => setConcluirForm({ ...concluirForm, garantia_unidade: e.target.value })}
-                          className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-                        >
-                          <option value="dias">dias</option>
-                          <option value="meses">meses</option>
-                          <option value="anos">anos</option>
-                        </select>
-                        <select
-                          value={concluirForm.garantia_referencia}
-                          onChange={(e) => setConcluirForm({ ...concluirForm, garantia_referencia: e.target.value })}
-                          className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-                        >
-                          {OPCOES_REFERENCIA_GARANTIA.map((op) => (
-                            <option key={op} value={op}>{op}</option>
-                          ))}
-                        </select>
-                      </div>
-                      {concluirForm.garantia_referencia === 'Outro...' && (
-                        <input
-                          type="text"
-                          placeholder='Ex: "do compressor"'
-                          value={concluirForm.garantiaReferenciaCustom}
-                          onChange={(e) => setConcluirForm({ ...concluirForm, garantiaReferenciaCustom: e.target.value })}
-                          className="col-span-1 sm:col-span-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                        />
-                      )}
+                      <input
+                        type="text"
+                        placeholder="Técnico responsável (opcional)"
+                        value={concluirForm.tecnico}
+                        onChange={(e) => setConcluirForm({ ...concluirForm, tecnico: e.target.value })}
+                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      />
                     </div>
 
+                    <label className="block text-xs text-gray-500 mb-1">Garantia (opcional)</label>
+                    <div className="flex gap-2 mb-1">
+                      <input
+                        type="number"
+                        placeholder="Quantidade"
+                        value={concluirForm.garantia_dias}
+                        onChange={(e) => setConcluirForm({ ...concluirForm, garantia_dias: e.target.value })}
+                        className="w-24 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      />
+                      <select
+                        value={concluirForm.garantia_unidade}
+                        onChange={(e) => setConcluirForm({ ...concluirForm, garantia_unidade: e.target.value })}
+                        className="rounded-lg border border-gray-300 px-2 py-2 text-sm"
+                      >
+                        <option value="dias">dias</option>
+                        <option value="meses">meses</option>
+                        <option value="anos">anos</option>
+                      </select>
+                      <select
+                        value={concluirForm.garantia_referencia}
+                        onChange={(e) => setConcluirForm({ ...concluirForm, garantia_referencia: e.target.value })}
+                        className="flex-1 rounded-lg border border-gray-300 px-2 py-2 text-sm"
+                      >
+                        {OPCOES_REFERENCIA_GARANTIA.map((op) => (
+                          <option key={op} value={op}>{op}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {concluirForm.garantia_referencia === 'Outro...' && (
+                      <input
+                        type="text"
+                        placeholder='Ex: "do compressor"'
+                        value={concluirForm.garantiaReferenciaCustom}
+                        onChange={(e) => setConcluirForm({ ...concluirForm, garantiaReferenciaCustom: e.target.value })}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mb-1"
+                      />
+                    )}
                     {concluirForm.garantia_dias && (
-                      <p className="text-xs text-green-700 mb-2">
+                      <p className="text-xs text-gray-500 mb-2">
                         No documento vai aparecer: "Garantia de {concluirForm.garantia_dias}{' '}
                         {unidadeGarantia(concluirForm.garantia_dias, concluirForm.garantia_unidade)}{' '}
                         {concluirForm.garantia_referencia === 'Outro...'
@@ -1211,47 +1269,101 @@ export default function OrdensServico() {
                       </p>
                     )}
 
-                    {concluirForm.modoValor === 'detalhado' ? (
-                      <p className="text-sm text-green-800 mb-2">
-                        Peças: <strong>{formatCurrencyBRL(totalPecas)}</strong> + Mão de obra:{' '}
-                        <strong>{formatCurrencyBRL(Number(concluirForm.valor_mao_de_obra) || 0)}</strong> = Total:{' '}
-                        <strong>{formatCurrencyBRL(totalPecas + (Number(concluirForm.valor_mao_de_obra) || 0))}</strong>
-                      </p>
-                    ) : (
-                      <p className="text-sm text-green-800 mb-2">
-                        Valor total: <strong>{formatCurrencyBRL(Number(concluirForm.valorFechado) || 0)}</strong>
-                        {totalPecas > 0 && (
-                          <span className="text-green-600 text-xs block">
-                            (as peças usadas ficam registradas no estoque normalmente, sem afetar esse valor)
-                          </span>
-                        )}
-                      </p>
-                    )}
-
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => setConcluindoId(null)} className="px-3 py-1.5 text-sm text-gray-500">
-                        Cancelar
-                      </button>
-                      <button
-                        onClick={() => confirmarConclusao(os)}
-                        className="flex items-center gap-1 rounded-lg bg-green-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-green-700"
-                      >
-                        <CheckCircle2 size={14} />{' '}
-                        {concluirForm.faturamento === 'acumular' ? 'Concluir e acumular' : 'Concluir e gerar conta a receber'}
-                      </button>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Data de conclusão do serviço</label>
+                      <input
+                        type="date"
+                        value={concluirForm.dataConclusao}
+                        onChange={(e) => setConcluirForm({ ...concluirForm, dataConclusao: e.target.value })}
+                        className="w-full sm:w-48 rounded-lg border border-gray-300 px-3 py-2 text-sm mb-3"
+                      />
                     </div>
+
+                    {mostrarFinalizar !== os.id ? (
+                      <button
+                        onClick={() => setMostrarFinalizar(os.id)}
+                        className="flex items-center justify-center gap-1 w-full rounded-lg bg-green-600 text-white py-2.5 text-sm font-medium hover:bg-green-700"
+                      >
+                        <CheckCircle2 size={16} /> Finalizar OS
+                      </button>
+                    ) : (
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                        <p className="text-sm text-green-900 mb-2">
+                          Total: <strong>
+                            {formatCurrencyBRL(
+                              concluirForm.modoValor === 'fechado'
+                                ? Number(concluirForm.valorFechado) || 0
+                                : totalPecas + (Number(concluirForm.valor_mao_de_obra) || 0)
+                            )}
+                          </strong>
+                        </p>
+                        <p className="text-xs font-medium text-green-900 mb-1.5">Como fica essa conta a receber?</p>
+                        <div className="space-y-1.5 mb-2">
+                          <label className="flex items-center gap-2 text-sm text-gray-700">
+                            <input
+                              type="radio"
+                              checked={concluirForm.finalizarComo === 'depois'}
+                              onChange={() => setConcluirForm({ ...concluirForm, finalizarComo: 'depois' })}
+                            />
+                            Gerar em aberto (cobra depois)
+                          </label>
+                          <label className="flex items-center gap-2 text-sm text-gray-700">
+                            <input
+                              type="radio"
+                              checked={concluirForm.finalizarComo === 'pago'}
+                              onChange={() => setConcluirForm({ ...concluirForm, finalizarComo: 'pago' })}
+                            />
+                            Já marcar como paga agora
+                          </label>
+                          {concluirForm.finalizarComo === 'pago' && (
+                            <div className="pl-6 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <select
+                                value={concluirForm.contaBancariaId}
+                                onChange={(e) => setConcluirForm({ ...concluirForm, contaBancariaId: e.target.value })}
+                                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                              >
+                                <option value="">Conta bancária...</option>
+                                {contas.map((c) => (
+                                  <option key={c.id} value={c.id}>{c.nome}</option>
+                                ))}
+                              </select>
+                              <select
+                                value={concluirForm.formaPagamento}
+                                onChange={(e) => setConcluirForm({ ...concluirForm, formaPagamento: e.target.value })}
+                                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                              >
+                                {['Pix', 'Dinheiro', 'Débito', 'Crédito', 'Boleto', 'Transferência', 'Outro'].map((f) => (
+                                  <option key={f} value={f}>{f}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                          <label className="flex items-center gap-2 text-sm text-gray-700">
+                            <input
+                              type="radio"
+                              checked={concluirForm.finalizarComo === 'acumular'}
+                              onChange={() => setConcluirForm({ ...concluirForm, finalizarComo: 'acumular' })}
+                            />
+                            Acumular pra cobrar depois junto (parceiro)
+                          </label>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => setMostrarFinalizar(null)} className="px-3 py-1.5 text-sm text-gray-500">
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={() => confirmarConclusao(os)}
+                            className="flex items-center gap-1 rounded-lg bg-green-600 text-white px-4 py-1.5 text-sm font-medium hover:bg-green-700"
+                          >
+                            <CheckCircle2 size={14} /> Confirmar
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 <div className="flex items-center gap-2 flex-wrap">
-                  {emAberto && concluindoId !== os.id && (
-                    <button
-                      onClick={() => abrirConclusao(os)}
-                      className="flex items-center gap-1 rounded-lg bg-green-600 text-white px-3 py-1.5 text-xs font-medium hover:bg-green-700"
-                    >
-                      <CheckCircle2 size={13} /> Concluir
-                    </button>
-                  )}
                   {emAberto && (
                     <button
                       onClick={() => cancelarOS(os.id)}
