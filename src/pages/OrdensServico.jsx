@@ -22,16 +22,6 @@ import {
   FileBarChart,
 } from 'lucide-react'
 
-const STATUS_ATUAL_OPCOES = [
-  'Agendado',
-  'Recolhida para oficina',
-  'Peça encomendada',
-  'Aguardando aprovação do orçamento',
-  'Pronta para entrega',
-  'Em atendimento no local',
-  'Outro...',
-]
-
 // "2026-01-15T14:30" -> "15/01 14:30"
 function formatDataHora(str) {
   if (!str) return ''
@@ -107,9 +97,6 @@ export default function OrdensServico() {
   const [mostrarListaAtivos, setMostrarListaAtivos] = useState(false)
   const [ativosDoCliente, setAtivosDoCliente] = useState([])
 
-  const [editandoStatusId, setEditandoStatusId] = useState(null)
-  const [statusAtualForm, setStatusAtualForm] = useState({ opcao: STATUS_ATUAL_OPCOES[0], texto: '', dataAgendamento: '' })
-
   const [concluindoId, setConcluindoId] = useState(null)
   const [concluirForm, setConcluirForm] = useState(CONCLUIR_VAZIO)
   const [expandidoId, setExpandidoId] = useState(null)
@@ -127,9 +114,15 @@ export default function OrdensServico() {
       setExpandidoId(null)
     } else {
       setExpandidoId(osId)
-      setEditandoStatusId(null)
       setConcluindoId(null)
     }
+  }
+
+  function abrirDaOficina(osId) {
+    setExpandidoId(osId)
+    setTimeout(() => {
+      document.getElementById(`os-${osId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 50)
   }
 
   async function carregar() {
@@ -322,30 +315,12 @@ export default function OrdensServico() {
   }
 
   
-  function abrirEdicaoStatus(os) {
-    setEditandoStatusId(os.id)
-    const jaEhOpcaoPadrao = STATUS_ATUAL_OPCOES.slice(0, -1).includes(os.status_atual)
-    setStatusAtualForm({
-      opcao: jaEhOpcaoPadrao ? os.status_atual : os.status_atual ? 'Outro...' : STATUS_ATUAL_OPCOES[0],
-      texto: jaEhOpcaoPadrao ? '' : os.status_atual || '',
-      dataAgendamento: os.data_agendamento || '',
-    })
-  }
-
-  async function salvarStatusAtual(osId) {
-    const valor = statusAtualForm.opcao === 'Outro...' ? statusAtualForm.texto.trim() : statusAtualForm.opcao
-    const { error } = await supabase
-      .from('ordens_servico')
-      .update({
-        status_atual: valor || null,
-        data_agendamento: statusAtualForm.opcao === 'Agendado' ? statusAtualForm.dataAgendamento || null : null,
-      })
-      .eq('id', osId)
+  async function alternarNaOficina(os) {
+    const { error } = await supabase.from('ordens_servico').update({ na_oficina: !os.na_oficina }).eq('id', os.id)
     if (error) {
       setErro(error.message)
       return
     }
-    setEditandoStatusId(null)
     carregar()
   }
 
@@ -558,39 +533,24 @@ export default function OrdensServico() {
 
   const listaAberta = lista.filter((os) => os.status === 'nao_iniciada' || os.status === 'em_andamento')
   const listaHistorico = lista.filter((os) => os.status === 'finalizada' || os.status === 'cancelada')
+  const listaNaOficina = listaAberta.filter((os) => os.na_oficina)
 
-  // Agrupa pelo status atual (Recolhida para oficina, Agendado, Peça encomendada...)
-  // pra não ficar tudo misturado quando tiver muitas OS's abertas.
-  function agruparPorStatusAtual(itens) {
-    const ordemBase = STATUS_ATUAL_OPCOES.slice(0, -1) // sem "Outro..."
-    const grupos = {}
-    for (const os of itens) {
-      const chave = os.status_atual || 'Sem status definido'
-      if (!grupos[chave]) grupos[chave] = []
-      grupos[chave].push(os)
-    }
-    const chaves = Object.keys(grupos).sort((a, b) => {
-      if (a === 'Sem status definido') return 1
-      if (b === 'Sem status definido') return -1
-      const ia = ordemBase.indexOf(a)
-      const ib = ordemBase.indexOf(b)
-      if (ia === -1 && ib === -1) return a.localeCompare(b)
-      if (ia === -1) return 1
-      if (ib === -1) return -1
-      return ia - ib
-    })
-    return chaves.map((chave) => ({
-      titulo: chave,
-      itens:
-        chave === 'Agendado'
-          ? [...grupos[chave]].sort((a, b) => (a.data_agendamento || '').localeCompare(b.data_agendamento || ''))
-          : grupos[chave],
-    }))
+  // Só separa as "Agendado" (automático, vindo da agenda) do resto — o resto fica junto,
+  // sem mais sub-status manuais pra escolher.
+  function agruparAbertos(itens) {
+    const agendados = [...itens.filter((os) => os.status_atual === 'Agendado')].sort((a, b) =>
+      (a.data_agendamento || '').localeCompare(b.data_agendamento || '')
+    )
+    const outros = itens.filter((os) => os.status_atual !== 'Agendado')
+    const grupos = []
+    if (agendados.length > 0) grupos.push({ titulo: 'Agendado', itens: agendados })
+    if (outros.length > 0) grupos.push({ titulo: null, itens: outros })
+    return grupos
   }
 
   const grupos = mostrarHistorico
     ? [{ titulo: null, itens: listaHistorico }]
-    : agruparPorStatusAtual(listaAberta)
+    : agruparAbertos(listaAberta)
 
   const itemEditando = editandoId ? lista.find((o) => o.id === editandoId) : null
   const editandoOSFinalizada = itemEditando?.status === 'finalizada'
@@ -823,6 +783,33 @@ export default function OrdensServico() {
         </form>
       )}
 
+      {!mostrarHistorico && listaNaOficina.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-900 mb-2">
+            <Wrench size={14} /> Na oficina ({listaNaOficina.length})
+          </p>
+          <ul className="space-y-1.5">
+            {listaNaOficina.map((os) => (
+              <li key={os.id} className="flex items-center justify-between gap-2 bg-white rounded-lg px-3 py-2">
+                <button
+                  onClick={() => abrirDaOficina(os.id)}
+                  className="flex-1 text-left text-sm text-blue-900 min-w-0 truncate"
+                >
+                  <span className="font-mono text-xs text-blue-400">OS #{os.numero}</span>{' '}
+                  {os.clientes?.nome || '(Sem cliente)'}
+                </button>
+                <button
+                  onClick={() => alternarNaOficina(os)}
+                  className="shrink-0 text-xs bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full hover:bg-blue-200"
+                >
+                  Entregar
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-gray-500">
           {mostrarHistorico ? `${listaHistorico.length} OS finalizada(s)/cancelada(s)` : `${listaAberta.length} OS em aberto`}
@@ -856,7 +843,7 @@ export default function OrdensServico() {
                   const totalPecas = totalPecasDaOS(os)
                   const emAberto = os.status === 'nao_iniciada' || os.status === 'em_andamento'
                   return (
-              <li key={os.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+              <li id={`os-${os.id}`} key={os.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                 <button
                   onClick={() => alternarExpandido(os.id)}
                   className="w-full text-left p-4 hover:bg-gray-50 transition-colors"
@@ -871,12 +858,15 @@ export default function OrdensServico() {
                             {TIPOS_SERVICO.find((t) => t.valor === os.tipo_servico)?.label || os.tipo_servico}
                           </span>
                         )}
-                        {emAberto && os.status_atual && (
+                        {emAberto && os.status_atual === 'Agendado' && (
                           <span className="flex items-center gap-1 text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">
-                            <Wrench size={11} /> {os.status_atual}
-                            {os.status_atual === 'Agendado' && os.data_agendamento
-                              ? ` · ${formatDataHora(os.data_agendamento)}`
-                              : ''}
+                            <Wrench size={11} /> Agendado
+                            {os.data_agendamento ? ` · ${formatDataHora(os.data_agendamento)}` : ''}
+                          </span>
+                        )}
+                        {emAberto && os.na_oficina && (
+                          <span className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                            <Wrench size={11} /> Na oficina
                           </span>
                         )}
                       </div>
@@ -925,57 +915,17 @@ export default function OrdensServico() {
                   <div className="px-4 pb-4 border-t border-gray-100 pt-3">
                 {emAberto && (
                   <div className="mb-3">
-                    {editandoStatusId === os.id ? (
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
-                        <select
-                          value={statusAtualForm.opcao}
-                          onChange={(e) => setStatusAtualForm({ ...statusAtualForm, opcao: e.target.value })}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                        >
-                          {STATUS_ATUAL_OPCOES.map((op) => (
-                            <option key={op} value={op}>{op}</option>
-                          ))}
-                        </select>
-                        {statusAtualForm.opcao === 'Outro...' && (
-                          <input
-                            value={statusAtualForm.texto}
-                            onChange={(e) => setStatusAtualForm({ ...statusAtualForm, texto: e.target.value })}
-                            placeholder="Descreva o status..."
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                          />
-                        )}
-                        {statusAtualForm.opcao === 'Agendado' && (
-                          <input
-                            type="datetime-local"
-                            value={statusAtualForm.dataAgendamento}
-                            onChange={(e) => setStatusAtualForm({ ...statusAtualForm, dataAgendamento: e.target.value })}
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                          />
-                        )}
-                        <div className="flex gap-2 pt-1">
-                          <button
-                            onClick={() => salvarStatusAtual(os.id)}
-                            className="flex-1 rounded-lg bg-amber-600 text-white py-2 text-sm font-medium hover:bg-amber-700"
-                          >
-                            Salvar
-                          </button>
-                          <button
-                            onClick={() => setEditandoStatusId(null)}
-                            className="rounded-lg bg-white border border-gray-300 text-gray-600 px-4 py-2 text-sm"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => abrirEdicaoStatus(os)}
-                        className="flex items-center gap-1.5 text-sm bg-amber-50 text-amber-700 px-3 py-2 rounded-lg hover:bg-amber-100 w-full sm:w-auto"
-                      >
-                        <Wrench size={14} />
-                        {os.status_atual || 'Definir status atual...'}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => alternarNaOficina(os)}
+                      className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg w-full sm:w-auto ${
+                        os.na_oficina
+                          ? 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Wrench size={14} />
+                      {os.na_oficina ? 'Devolver / Entregar ao cliente' : 'Recolher para oficina'}
+                    </button>
                   </div>
                 )}
 
