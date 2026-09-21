@@ -123,6 +123,7 @@ export default function OrdensServico() {
       garantia_referencia: os.garantia_referencia || 'do serviço',
       dataConclusao: os.data_conclusao || todayISO(),
       tecnico: os.tecnico || '',
+      valorFechado: os.valor_orcado != null ? String(os.valor_orcado) : '',
     })
   }
 
@@ -945,6 +946,11 @@ export default function OrdensServico() {
                       {os.status === 'finalizada' && os.servicos_realizados && (
                         <p className="text-xs text-gray-500 mt-1">
                           <span className="font-medium text-gray-600">Serviços realizados:</span> {os.servicos_realizados}
+                        </p>
+                      )}
+                      {os.status !== 'finalizada' && os.valor_orcado != null && (
+                        <p className="text-xs text-teal-600 mt-1">
+                          Valor combinado: {formatCurrencyBRL(os.valor_orcado)}
                         </p>
                       )}
                       <p className="text-xs text-gray-400 mt-1">

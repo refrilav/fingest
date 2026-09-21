@@ -72,6 +72,7 @@ const CRIAR_VAZIO = {
   cliente_id: '',
   tipo_servico: '',
   descricao_problema: '',
+  valorCombinado: '',
   titulo: 'Bloqueio',
   observacoes: '',
   endereco: '',
@@ -199,6 +200,7 @@ export default function Agenda() {
       endereco: form.endereco || null,
       cliente_final: form.cliente_final || null,
       observacoes: form.observacoes || null,
+      valor_orcado: form.valorCombinado ? Number(form.valorCombinado) : null,
       data_abertura: todayISO(),
       status: 'em_andamento',
       status_atual: 'Agendado',
@@ -450,6 +452,24 @@ export default function Agenda() {
                       rows={2}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Valor já combinado com o cliente (opcional)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      inputMode="decimal"
+                      placeholder="R$ 0,00"
+                      value={form.valorCombinado}
+                      onChange={(e) => setForm({ ...form, valorCombinado: e.target.value })}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      Fica registrado na OS e já vem preenchido na hora de fechar o atendimento.
+                    </p>
                   </div>
 
                   {!form.mostrarMais ? (
