@@ -9,7 +9,6 @@ import SelectCategoria from '../components/SelectCategoria'
 import {
   Plus,
   Wrench,
-  Play,
   CheckCircle2,
   X,
   Trash2,
@@ -62,6 +61,8 @@ const CAMPOS_VAZIOS = {
   data_abertura: todayISO(),
   cliente_final: '',
   data_conclusao_edicao: '',
+  iniciarAgora: true,
+  dataAgendamento: '',
 }
 
 const CONCLUIR_VAZIO = {
@@ -100,7 +101,7 @@ export default function OrdensServico() {
   const [ativosSelecionados, setAtivosSelecionados] = useState([]) // [{id, local, codigo}]
   const [mostrarForm, setMostrarForm] = useState(false)
   const [editandoId, setEditandoId] = useState(null)
-  const [filtroStatus, setFiltroStatus] = useState('abertas')
+  const [mostrarHistorico, setMostrarHistorico] = useState(false)
 
   const [mostrarListaAtivos, setMostrarListaAtivos] = useState(false)
   const [ativosDoCliente, setAtivosDoCliente] = useState([])
@@ -186,6 +187,19 @@ export default function OrdensServico() {
     const itemOriginal = editandoId ? lista.find((o) => o.id === editandoId) : null
     if (itemOriginal?.status === 'finalizada' && form.data_conclusao_edicao) {
       payload.data_conclusao = form.data_conclusao_edicao
+    }
+
+    // Só na criação: a OS já nasce pronta pra trabalhar (sem etapa "não iniciada"),
+    // a menos que ela seja deixada agendada pra depois.
+    if (!editandoId) {
+      payload.status = 'em_andamento'
+      if (form.iniciarAgora) {
+        payload.status_atual = null
+        payload.data_agendamento = null
+      } else {
+        payload.status_atual = 'Agendado'
+        payload.data_agendamento = form.dataAgendamento || null
+      }
     }
 
     let osId = editandoId
@@ -298,18 +312,7 @@ export default function OrdensServico() {
     }
   }
 
-  async function iniciarOS(os) {
-    const { error } = await supabase
-      .from('ordens_servico')
-      .update({ status: 'em_andamento', data_inicio: todayISO() })
-      .eq('id', os.id)
-    if (error) {
-      setErro(error.message)
-      return
-    }
-    carregar()
-  }
-
+  
   function abrirEdicaoStatus(os) {
     setEditandoStatusId(os.id)
     const jaEhOpcaoPadrao = STATUS_ATUAL_OPCOES.slice(0, -1).includes(os.status_atual)
@@ -544,14 +547,11 @@ export default function OrdensServico() {
     carregar()
   }
 
-  const listaFiltrada = lista.filter((os) => {
-    if (filtroStatus === 'todas') return true
-    if (filtroStatus === 'abertas') return os.status === 'nao_iniciada' || os.status === 'em_andamento'
-    return os.status === filtroStatus
-  })
+  const listaAberta = lista.filter((os) => os.status === 'nao_iniciada' || os.status === 'em_andamento')
+  const listaHistorico = lista.filter((os) => os.status === 'finalizada' || os.status === 'cancelada')
 
-  // Agrupa as OS's "em andamento" pelo status atual (Recolhida para oficina, Peça encomendada...)
-  // pra não ficar tudo misturado quando tiver muitas nesse status.
+  // Agrupa pelo status atual (Recolhida para oficina, Agendado, Peça encomendada...)
+  // pra não ficar tudo misturado quando tiver muitas OS's abertas.
   function agruparPorStatusAtual(itens) {
     const ordemBase = STATUS_ATUAL_OPCOES.slice(0, -1) // sem "Outro..."
     const grupos = {}
@@ -579,18 +579,9 @@ export default function OrdensServico() {
     }))
   }
 
-  let grupos
-  if (filtroStatus === 'em_andamento') {
-    grupos = agruparPorStatusAtual(listaFiltrada)
-  } else if (filtroStatus === 'abertas') {
-    const naoIniciadas = listaFiltrada.filter((o) => o.status === 'nao_iniciada')
-    const emAndamento = listaFiltrada.filter((o) => o.status === 'em_andamento')
-    grupos = []
-    if (naoIniciadas.length > 0) grupos.push({ titulo: 'Não iniciadas', itens: naoIniciadas })
-    grupos.push(...agruparPorStatusAtual(emAndamento))
-  } else {
-    grupos = [{ titulo: null, itens: listaFiltrada }]
-  }
+  const grupos = mostrarHistorico
+    ? [{ titulo: null, itens: listaHistorico }]
+    : agruparPorStatusAtual(listaAberta)
 
   const itemEditando = editandoId ? lista.find((o) => o.id === editandoId) : null
   const editandoOSFinalizada = itemEditando?.status === 'finalizada'
@@ -731,6 +722,39 @@ export default function OrdensServico() {
             </div>
           )}
 
+          {!editandoId && (
+            <div className="col-span-1 sm:col-span-2">
+              <div className="flex gap-2 bg-gray-50 rounded-lg p-1">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, iniciarAgora: true })}
+                  className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+                    form.iniciarAgora ? 'bg-white shadow-sm text-primary-700' : 'text-gray-500'
+                  }`}
+                >
+                  Começar agora
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, iniciarAgora: false })}
+                  className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+                    !form.iniciarAgora ? 'bg-white shadow-sm text-primary-700' : 'text-gray-500'
+                  }`}
+                >
+                  Deixar agendado pra depois
+                </button>
+              </div>
+              {!form.iniciarAgora && (
+                <input
+                  type="datetime-local"
+                  value={form.dataAgendamento}
+                  onChange={(e) => setForm({ ...form, dataAgendamento: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mt-2"
+                />
+              )}
+            </div>
+          )}
+
           <textarea
             placeholder="Descrição do problema / serviço solicitado (opcional)"
             value={form.descricao_problema}
@@ -790,39 +814,30 @@ export default function OrdensServico() {
         </form>
       )}
 
-      <div className="flex gap-2 mb-4 flex-wrap">
-        {[
-          { valor: 'abertas', label: 'Abertas' },
-          { valor: 'nao_iniciada', label: 'Não iniciadas' },
-          { valor: 'em_andamento', label: 'Em andamento' },
-          { valor: 'finalizada', label: 'Finalizadas' },
-          { valor: 'cancelada', label: 'Canceladas' },
-          { valor: 'todas', label: 'Todas' },
-        ].map((f) => (
-          <button
-            key={f.valor}
-            onClick={() => setFiltroStatus(f.valor)}
-            className={`px-3 py-1 rounded-full text-xs font-medium ${
-              filtroStatus === f.valor ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-gray-500">
+          {mostrarHistorico ? `${listaHistorico.length} OS finalizada(s)/cancelada(s)` : `${listaAberta.length} OS em aberto`}
+        </p>
+        <button
+          onClick={() => setMostrarHistorico(!mostrarHistorico)}
+          className="text-sm text-primary-700 hover:underline"
+        >
+          {mostrarHistorico ? '← Voltar pro que está aberto' : 'Ver histórico (finalizadas/canceladas)'}
+        </button>
       </div>
 
       {loading ? (
         <p className="text-gray-400 text-sm">Carregando...</p>
-      ) : listaFiltrada.length === 0 ? (
+      ) : (mostrarHistorico ? listaHistorico : listaAberta).length === 0 ? (
         <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 flex flex-col items-center text-center text-gray-400">
           <ClipboardList size={28} className="mb-3" />
-          <p className="text-sm">Nenhuma OS encontrada nesse filtro.</p>
+          <p className="text-sm">{mostrarHistorico ? 'Nenhuma OS no histórico ainda.' : 'Nenhuma OS em aberto no momento.'}</p>
         </div>
       ) : (
         <div className="space-y-6">
           {grupos.map((grupo, gi) => (
             <div key={grupo.titulo || `grupo-${gi}`}>
-              {grupo.titulo && (
+              {grupo.titulo && grupos.length > 1 && (
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                   {grupo.titulo} <span className="font-normal normal-case text-gray-400">({grupo.itens.length})</span>
                 </p>
@@ -830,6 +845,7 @@ export default function OrdensServico() {
               <ul className="space-y-3">
                 {grupo.itens.map((os) => {
                   const totalPecas = totalPecasDaOS(os)
+                  const emAberto = os.status === 'nao_iniciada' || os.status === 'em_andamento'
                   return (
               <li key={os.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                 <button
@@ -846,7 +862,7 @@ export default function OrdensServico() {
                             {TIPOS_SERVICO.find((t) => t.valor === os.tipo_servico)?.label || os.tipo_servico}
                           </span>
                         )}
-                        {os.status === 'em_andamento' && os.status_atual && (
+                        {emAberto && os.status_atual && (
                           <span className="flex items-center gap-1 text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">
                             <Wrench size={11} /> {os.status_atual}
                             {os.status_atual === 'Agendado' && os.data_agendamento
@@ -898,7 +914,7 @@ export default function OrdensServico() {
 
                 {expandidoId === os.id && (
                   <div className="px-4 pb-4 border-t border-gray-100 pt-3">
-                {os.status === 'em_andamento' && (
+                {emAberto && (
                   <div className="mb-3">
                     {editandoStatusId === os.id ? (
                       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
@@ -954,7 +970,7 @@ export default function OrdensServico() {
                   </div>
                 )}
 
-                {(os.status === 'em_andamento' || os.status === 'finalizada') && (os.ordens_servico_pecas || []).length > 0 && (
+                {(emAberto || os.status === 'finalizada') && (os.ordens_servico_pecas || []).length > 0 && (
                   <div className="mb-3 bg-gray-50 border border-gray-100 rounded-lg p-2">
                     <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
                       <Package size={11} /> Peças usadas
@@ -962,7 +978,7 @@ export default function OrdensServico() {
                     <ul className="space-y-2">
                       {os.ordens_servico_pecas.map((item) => (
                         <li key={item.id} className="bg-white rounded-lg border border-gray-200 p-2">
-                          {os.status === 'em_andamento' ? (
+                          {emAberto ? (
                             <>
                               <div className="flex items-center justify-between gap-2 mb-1.5">
                                 <span className="flex-1 text-sm text-gray-700">{item.nome_peca}</span>
@@ -1018,7 +1034,7 @@ export default function OrdensServico() {
                   </div>
                 )}
 
-                {os.status === 'em_andamento' && (
+                {emAberto && (
                   <div className="mb-3 space-y-3">
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">Valor da mão de obra</label>
@@ -1072,7 +1088,7 @@ export default function OrdensServico() {
                   </div>
                 )}
 
-                {os.status === 'em_andamento' && (
+                {emAberto && (
                   <div className="mb-3">
                     <BuscaPeca onSelecionar={(peca) => adicionarPeca(os, peca)} placeholder="Adicionar peça usada..." />
                   </div>
@@ -1262,15 +1278,7 @@ export default function OrdensServico() {
                 )}
 
                 <div className="flex items-center gap-2 flex-wrap">
-                  {os.status === 'nao_iniciada' && (
-                    <button
-                      onClick={() => iniciarOS(os)}
-                      className="flex items-center gap-1 rounded-lg bg-primary-600 text-white px-3 py-1.5 text-xs font-medium hover:bg-primary-700"
-                    >
-                      <Play size={13} /> Iniciar
-                    </button>
-                  )}
-                  {os.status === 'em_andamento' && concluindoId !== os.id && (
+                  {emAberto && concluindoId !== os.id && (
                     <button
                       onClick={() => abrirConclusao(os)}
                       className="flex items-center gap-1 rounded-lg bg-green-600 text-white px-3 py-1.5 text-xs font-medium hover:bg-green-700"
@@ -1278,7 +1286,7 @@ export default function OrdensServico() {
                       <CheckCircle2 size={13} /> Concluir
                     </button>
                   )}
-                  {(os.status === 'nao_iniciada' || os.status === 'em_andamento') && (
+                  {emAberto && (
                     <button
                       onClick={() => cancelarOS(os.id)}
                       className="flex items-center gap-1 rounded-lg bg-gray-100 text-gray-500 px-3 py-1.5 text-xs hover:bg-gray-200"
