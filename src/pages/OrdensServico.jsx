@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatDateBR, formatCurrencyBRL, todayISO } from '../lib/format'
@@ -58,6 +58,7 @@ const CAMPOS_VAZIOS = {
 const CONCLUIR_VAZIO = {
   categoria_id: '',
   valor_mao_de_obra: '',
+  servicos_realizados: '',
   garantia_dias: '',
   garantia_unidade: 'dias',
   garantia_referencia: 'do serviço',
@@ -104,8 +105,6 @@ export default function OrdensServico() {
   const [expandidoId, setExpandidoId] = useState(null)
   const [contas, setContas] = useState([])
   const [pecaManual, setPecaManual] = useState({}) // { [osId]: { aberto, nome, valor } }
-  const maoDeObraRefs = useRef({})
-  const servicosRefs = useRef({})
   const [salvoRecente, setSalvoRecente] = useState({}) // { [`${osId}-maoDeObra`]: true }
 
   function mostrarSalvo(chave) {
@@ -118,6 +117,7 @@ export default function OrdensServico() {
       ...CONCLUIR_VAZIO,
       categoria_id: os.categoria_id || '',
       valor_mao_de_obra: os.valor_mao_de_obra != null ? String(os.valor_mao_de_obra) : '',
+      servicos_realizados: os.servicos_realizados || '',
       garantia_dias: os.garantia_dias != null ? String(os.garantia_dias) : '',
       garantia_unidade: os.garantia_unidade || 'dias',
       garantia_referencia: os.garantia_referencia || 'do serviço',
@@ -547,6 +547,7 @@ export default function OrdensServico() {
         data_conclusao: dataConclusao,
         valor_final: valorFinal,
         valor_mao_de_obra: maoDeObra,
+        servicos_realizados: concluirForm.servicos_realizados || null,
         garantia_dias: concluirForm.garantia_dias ? Number(concluirForm.garantia_dias) : null,
         garantia_unidade: concluirForm.garantia_unidade,
         garantia_referencia:
@@ -990,17 +991,16 @@ export default function OrdensServico() {
                   <div className="mb-3">
                     <label className="block text-xs text-gray-500 mb-1">Serviços realizados</label>
                     <textarea
-                      ref={(el) => (servicosRefs.current[os.id] = el)}
                       placeholder={'Ex: troca do compressor\nlimpeza dos filtros\n(um item por linha, se quiser)'}
-                      defaultValue={os.servicos_realizados ?? ''}
+                      value={concluirForm.servicos_realizados}
+                      onChange={(e) => setConcluirForm({ ...concluirForm, servicos_realizados: e.target.value })}
                       rows={3}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm resize-y"
                     />
                     <div className="flex items-center gap-2 mt-1.5">
                       <button
                         onClick={() => {
-                          const el = servicosRefs.current[os.id]
-                          salvarServicosRealizados(os, el.value)
+                          salvarServicosRealizados(os, concluirForm.servicos_realizados)
                           mostrarSalvo(`${os.id}-serv`)
                         }}
                         className="rounded-lg bg-gray-100 text-gray-700 px-4 py-1.5 text-xs font-medium hover:bg-gray-200"
@@ -1124,21 +1124,19 @@ export default function OrdensServico() {
                   <div className="mb-3">
                     <label className="block text-xs text-gray-500 mb-1">Valor da mão de obra</label>
                     <input
-                      ref={(el) => (maoDeObraRefs.current[os.id] = el)}
                       type="number"
                       step="0.01"
                       inputMode="decimal"
                       placeholder="R$ 0,00"
-                      defaultValue={os.valor_mao_de_obra ?? ''}
+                      value={concluirForm.valor_mao_de_obra}
+                      onChange={(e) => setConcluirForm({ ...concluirForm, valor_mao_de_obra: e.target.value })}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
                     />
                     <div className="flex items-center gap-2 mt-1.5">
                       <button
                         onClick={() => {
-                          const el = maoDeObraRefs.current[os.id]
-                          const novo = el.value === '' ? null : Number(el.value)
+                          const novo = concluirForm.valor_mao_de_obra === '' ? null : Number(concluirForm.valor_mao_de_obra)
                           salvarMaoDeObra(os, novo)
-                          setConcluirForm((f) => ({ ...f, valor_mao_de_obra: el.value }))
                           mostrarSalvo(`${os.id}-mao`)
                         }}
                         className="rounded-lg bg-gray-100 text-gray-700 px-4 py-1.5 text-xs font-medium hover:bg-gray-200"
