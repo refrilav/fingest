@@ -136,12 +136,13 @@ export default function BuscaAtivo({ clienteId, onSelecionar, placeholder }) {
     setBuscandoRef(true)
     setErroRef(null)
     setAtivoEstoqueEncontrado(null)
+    // busca por qualquer QR code com essa referência — seja um do estoque (nunca usado,
+    // sem cliente) ou um antigo que já foi usado e desativado (ainda tem cliente_id preso,
+    // mas está livre pra reaproveitar já que não está mais ativo)
     const { data, error } = await supabase
       .from('ativos')
-      .select('id, codigo')
+      .select('id, codigo, cliente_id, ativo')
       .eq('codigo', numero)
-      .is('cliente_id', null)
-      .eq('ativo', true)
       .maybeSingle()
     setBuscandoRef(false)
     if (error) {
@@ -149,7 +150,11 @@ export default function BuscaAtivo({ clienteId, onSelecionar, placeholder }) {
       return
     }
     if (!data) {
-      setErroRef(`Não encontrei um QR code do estoque com a referência REF-${numero} (ou ele já foi vinculado a outro cliente).`)
+      setErroRef(`Não encontrei nenhum QR code com a referência REF-${numero}.`)
+      return
+    }
+    if (data.ativo && data.cliente_id && data.cliente_id !== clienteId) {
+      setErroRef(`REF-${numero} já está em uso ativo por outro cliente. Não dá pra reaproveitar sem desvincular ele lá primeiro.`)
       return
     }
     setAtivoEstoqueEncontrado(data)
@@ -170,6 +175,7 @@ export default function BuscaAtivo({ clienteId, onSelecionar, placeholder }) {
       .from('ativos')
       .update({
         cliente_id: clienteId,
+        ativo: true, // reativa, caso fosse um QR code desativado sendo reaproveitado
         local: novoLocal.trim(),
         equipamento_id: novoEquipamentoId || null,
         modelo: novoModelo || null,
