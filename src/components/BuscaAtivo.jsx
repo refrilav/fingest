@@ -136,28 +136,59 @@ export default function BuscaAtivo({ clienteId, onSelecionar, placeholder }) {
     setBuscandoRef(true)
     setErroRef(null)
     setAtivoEstoqueEncontrado(null)
-    // busca por qualquer QR code com essa referência — seja um do estoque (nunca usado,
-    // sem cliente) ou um antigo que já foi usado e desativado (ainda tem cliente_id preso,
-    // mas está livre pra reaproveitar já que não está mais ativo)
-    const { data, error } = await supabase
+
+    // A referência é única POR CLIENTE, não pro sistema todo — então primeiro tenta achar
+    // um QR code com esse número que já foi usado e desativado, mas ainda desse mesmo cliente
+    const { data: doCliente, error: erroCliente } = await supabase
       .from('ativos')
       .select('id, codigo, cliente_id, ativo')
       .eq('codigo', numero)
+      .eq('cliente_id', clienteId)
+      .limit(1)
       .maybeSingle()
+
+    if (erroCliente) {
+      setBuscandoRef(false)
+      setErroRef(erroCliente.message)
+      return
+    }
+
+    if (doCliente) {
+      setBuscandoRef(false)
+      if (doCliente.ativo) {
+        setErroRef(`REF-${numero} já está ativo pra esse cliente — busque ele na lista normal, mais acima.`)
+        return
+      }
+      setAtivoEstoqueEncontrado(doCliente)
+      setNovoLocal('')
+      setNovoEquipamentoId('')
+      setNovoModelo('')
+      setNovoIntervalo('3')
+      setNovoBtu('')
+      return
+    }
+
+    // senão, procura um QR code do estoque puro (impresso com antecedência, sem cliente ainda)
+    const { data: doEstoque, error: erroEstoque } = await supabase
+      .from('ativos')
+      .select('id, codigo, cliente_id, ativo')
+      .eq('codigo', numero)
+      .is('cliente_id', null)
+      .limit(1)
+      .maybeSingle()
+
     setBuscandoRef(false)
-    if (error) {
-      setErroRef(error.message)
+    if (erroEstoque) {
+      setErroRef(erroEstoque.message)
       return
     }
-    if (!data) {
-      setErroRef(`Não encontrei nenhum QR code com a referência REF-${numero}.`)
+    if (!doEstoque) {
+      setErroRef(
+        `Não encontrei REF-${numero} no estoque nem desativado pra esse cliente. Se ela pertence a outro cliente e ainda está ativa, desvincule ela lá primeiro.`
+      )
       return
     }
-    if (data.ativo && data.cliente_id && data.cliente_id !== clienteId) {
-      setErroRef(`REF-${numero} já está em uso ativo por outro cliente. Não dá pra reaproveitar sem desvincular ele lá primeiro.`)
-      return
-    }
-    setAtivoEstoqueEncontrado(data)
+    setAtivoEstoqueEncontrado(doEstoque)
     setNovoLocal('')
     setNovoEquipamentoId('')
     setNovoModelo('')
