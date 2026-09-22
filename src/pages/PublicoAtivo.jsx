@@ -27,6 +27,7 @@ function infoTipo(tipo) {
 export default function PublicoAtivo() {
   const { id } = useParams()
   const [ativo, setAtivo] = useState(null)
+  const [cliente, setCliente] = useState(null)
   const [historico, setHistorico] = useState([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
@@ -54,6 +55,18 @@ export default function PublicoAtivo() {
       setLaudosPorOS(
         Object.fromEntries((laudosRes.data || []).map((v) => [v.laudos?.ordem_servico_id, v.laudo_id]))
       )
+
+      // dados do cliente vêm de uma view pública enxuta (mesma usada no laudo) — a
+      // tabela "clientes" de verdade só pode ser lida por quem está logado no sistema.
+      if (ativoRes.data.cliente_id) {
+        const { data: clienteData } = await supabase
+          .from('clientes_publico_laudo')
+          .select('nome, endereco, bairro, cidade')
+          .eq('id', ativoRes.data.cliente_id)
+          .maybeSingle()
+        setCliente(clienteData)
+      }
+
       setLoading(false)
     }
     carregar()
@@ -101,6 +114,19 @@ export default function PublicoAtivo() {
         </div>
 
         <div className="bg-white border border-gray-200 rounded-2xl p-5 mb-4">
+          {cliente?.nome && (
+            <>
+              <p className="text-xs text-gray-400 uppercase tracking-wide">Cliente</p>
+              <p className="text-base font-semibold text-gray-800 mb-2">
+                {cliente.nome}
+                {cliente.endereco ? (
+                  <span className="block text-xs font-normal text-gray-500 mt-0.5">
+                    {[cliente.endereco, cliente.bairro, cliente.cidade].filter(Boolean).join(', ')}
+                  </span>
+                ) : null}
+              </p>
+            </>
+          )}
           <p className="text-xs text-gray-400 uppercase tracking-wide">Equipamento</p>
           <p className="text-lg font-bold text-gray-900">{ativo.local || '(sem local)'}</p>
           <p className="text-sm text-gray-600">
