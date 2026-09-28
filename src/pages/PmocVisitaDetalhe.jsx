@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatDateBR, todayISO } from '../lib/format'
 import { LABEL_GRUPO, statusVisita, COR_STATUS_VISITA, LABEL_STATUS_VISITA } from '../lib/pmoc'
-import { ArrowLeft, Check, X } from 'lucide-react'
+import { ArrowLeft, Check, X, CheckCheck } from 'lucide-react'
 
 export default function PmocVisitaDetalhe() {
   const { id } = useParams()
@@ -13,6 +13,7 @@ export default function PmocVisitaDetalhe() {
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
   const [salvando, setSalvando] = useState(false)
+  const [marcandoTudo, setMarcandoTudo] = useState(false)
 
   const hoje = todayISO()
 
@@ -66,6 +67,38 @@ export default function PmocVisitaDetalhe() {
     else carregar()
   }
 
+  // Marca todos os itens do checklist de UM equipamento e já salva
+  async function marcarTudoEquipamento(itemIndex) {
+    const item = itens[itemIndex]
+    const checklist = item.checklist.map((c) => ({ ...c, concluido: true }))
+    await salvarItem({ ...item, checklist })
+  }
+
+  // Marca TODOS os equipamentos da visita de uma vez (útil em contratos com muitos equipamentos)
+  async function marcarTudoVisita() {
+    if (!confirm('Marcar todos os itens de todos os equipamentos desta visita como concluídos?')) return
+    setMarcandoTudo(true)
+    const atualizacoes = itens.map((item) => ({
+      id: item.id,
+      checklist: item.checklist.map((c) => ({ ...c, concluido: true })),
+      concluido: true,
+      data_execucao: hoje,
+    }))
+    for (const upd of atualizacoes) {
+      const { error } = await supabase
+        .from('pmoc_visita_itens')
+        .update({ checklist: upd.checklist, concluido: upd.concluido, data_execucao: upd.data_execucao })
+        .eq('id', upd.id)
+      if (error) {
+        setErro(error.message)
+        setMarcandoTudo(false)
+        return
+      }
+    }
+    setMarcandoTudo(false)
+    carregar()
+  }
+
   async function marcarVisitaRealizada() {
     setSalvando(true)
     const { error } = await supabase.from('pmoc_visitas').update({ data_realizada: hoje }).eq('id', id)
@@ -106,6 +139,19 @@ export default function PmocVisitaDetalhe() {
           {LABEL_STATUS_VISITA[status]}
         </span>
       </div>
+
+      {itens.length > 1 && !visita.data_realizada && (
+        <div className="flex justify-end mt-2">
+          <button
+            onClick={marcarTudoVisita}
+            disabled={marcandoTudo}
+            className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-800 disabled:opacity-60"
+          >
+            <CheckCheck size={14} />
+            {marcandoTudo ? 'Marcando...' : 'Marcar tudo (todos os equipamentos)'}
+          </button>
+        </div>
+      )}
 
       {erro && (
         <div className="mb-4 flex items-center justify-between rounded-lg bg-red-50 text-red-700 text-sm px-4 py-2 mt-3">
@@ -157,12 +203,22 @@ export default function PmocVisitaDetalhe() {
                   {item.checklist.filter((c) => c.concluido).length}/{item.checklist.length} itens marcados
                 </span>
               )}
-              <button
-                onClick={() => salvarItem(item)}
-                className="text-xs rounded-lg bg-gray-100 text-gray-700 px-3 py-1.5 hover:bg-gray-200"
-              >
-                Salvar
-              </button>
+              <div className="flex gap-2">
+                {!item.concluido && (
+                  <button
+                    onClick={() => marcarTudoEquipamento(itemIndex)}
+                    className="flex items-center gap-1 text-xs rounded-lg bg-primary-50 text-primary-700 px-3 py-1.5 hover:bg-primary-100"
+                  >
+                    <CheckCheck size={14} /> Marcar tudo
+                  </button>
+                )}
+                <button
+                  onClick={() => salvarItem(item)}
+                  className="text-xs rounded-lg bg-gray-100 text-gray-700 px-3 py-1.5 hover:bg-gray-200"
+                >
+                  Salvar
+                </button>
+              </div>
             </div>
           </div>
         ))}

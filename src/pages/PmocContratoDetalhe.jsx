@@ -11,7 +11,7 @@ import {
   removerEquipamentoContrato,
   alterarFrequenciaHigienizacao,
 } from '../lib/pmoc'
-import { ArrowLeft, Plus, X, AlertTriangle, Trash2, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Plus, X, AlertTriangle, Trash2, ChevronRight, FileText } from 'lucide-react'
 
 const ITEM_VAZIO = { descricao_equipamento: '', local: '', capacidade_btu: '', frequencia_higienizacao: 'trimestral' }
 
@@ -132,11 +132,19 @@ export default function PmocContratoDetalhe() {
             Contrato PMOC desde {formatDateBR(contrato.data_inicio)} · Status: {contrato.status}
           </p>
         </div>
-        {contrato.status === 'ativo' && (
-          <button onClick={encerrarContrato} className="text-xs text-red-500 hover:text-red-700">
-            Encerrar contrato
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          <Link
+            to={`/pmoc/contratos/${id}/relatorio`}
+            className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-800"
+          >
+            <FileText size={14} /> Ver relatório
+          </Link>
+          {contrato.status === 'ativo' && (
+            <button onClick={encerrarContrato} className="text-xs text-red-500 hover:text-red-700">
+              Encerrar contrato
+            </button>
+          )}
+        </div>
       </div>
 
       {resumo?.exige_rt && (
