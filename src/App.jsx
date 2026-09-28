@@ -38,6 +38,12 @@ import Cadastros from './pages/Cadastros'
 import EstoqueQRCodes from './pages/EstoqueQRCodes'
 import ImprimirQRCodesEstoque from './pages/ImprimirQRCodesEstoque'
 import Agenda from './pages/Agenda'
+import PmocPropostas from './pages/PmocPropostas'
+import PmocContratos from './pages/PmocContratos'
+import PmocConverterProposta from './pages/PmocConverterProposta'
+import PmocContratoDetalhe from './pages/PmocContratoDetalhe'
+import PmocVisitaDetalhe from './pages/PmocVisitaDetalhe'
+import PmocRelatorio from './pages/PmocRelatorio'
 
 function RotaProtegida({ children }) {
   const { session, loading } = useAuth()
@@ -126,6 +132,14 @@ function Rotas() {
         }
       />
       <Route
+        path="/pmoc/contratos/:id/relatorio"
+        element={
+          <RotaProtegida>
+            <PmocRelatorio />
+          </RotaProtegida>
+        }
+      />
+      <Route
         path="/"
         element={
           <RotaProtegida>
@@ -160,6 +174,11 @@ function Rotas() {
         <Route path="transferencias" element={<Transferencias />} />
         <Route path="ajustes-saldo" element={<AjustesSaldo />} />
         <Route path="contas-bancarias/:id" element={<ExtratoConta />} />
+        <Route path="pmoc" element={<PmocContratos />} />
+        <Route path="pmoc/propostas" element={<PmocPropostas />} />
+        <Route path="pmoc/propostas/:id/converter" element={<PmocConverterProposta />} />
+        <Route path="pmoc/contratos/:id" element={<PmocContratoDetalhe />} />
+        <Route path="pmoc/visitas/:id" element={<PmocVisitaDetalhe />} />
       </Route>
     </Routes>
   )
