@@ -93,7 +93,12 @@ export default function PmocRelatorio() {
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-6 print:border-0 print:p-0">
-        <h1 className="text-xl font-bold text-gray-900 mb-1">Relatório de Conformidade PMOC</h1>
+        <div className="flex items-center gap-3 mb-3">
+          <img src="/logo.png" alt="Refrilav" className="h-12 w-auto" />
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">Relatório de Conformidade PMOC</h1>
+          </div>
+        </div>
         <p className="text-sm text-gray-600 mb-4">
           Programa de Manutenção, Operação e Controle — Lei 13.589/2018, Portaria MS 3.523/1998, RDC ANVISA
           886/2024 e NBR 17037
