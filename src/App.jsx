@@ -44,6 +44,7 @@ import PmocConverterProposta from './pages/PmocConverterProposta'
 import PmocContratoDetalhe from './pages/PmocContratoDetalhe'
 import PmocVisitaDetalhe from './pages/PmocVisitaDetalhe'
 import PmocRelatorio from './pages/PmocRelatorio'
+import PmocPlano from './pages/PmocPlano'
 
 function RotaProtegida({ children }) {
   const { session, loading } = useAuth()
@@ -136,6 +137,14 @@ function Rotas() {
         element={
           <RotaProtegida>
             <PmocRelatorio />
+          </RotaProtegida>
+        }
+      />
+      <Route
+        path="/pmoc/contratos/:id/plano"
+        element={
+          <RotaProtegida>
+            <PmocPlano />
           </RotaProtegida>
         }
       />
