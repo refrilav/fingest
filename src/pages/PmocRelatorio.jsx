@@ -56,7 +56,11 @@ export default function PmocRelatorio() {
         const visita = visitasPorId[item.visita_id]
         if (!visita) continue
         if (!mat[item.pmoc_equipamento_id]) mat[item.pmoc_equipamento_id] = {}
-        mat[item.pmoc_equipamento_id][visita.numero_mes] = { grupos: item.grupos, concluido: item.concluido }
+        mat[item.pmoc_equipamento_id][visita.numero_mes] = {
+          grupos: item.grupos,
+          concluido: item.concluido,
+          data_execucao: item.data_execucao,
+        }
       }
 
       setContrato(c)
@@ -177,11 +181,24 @@ export default function PmocRelatorio() {
                   return (
                     <td
                       key={v.id}
-                      className={`p-2 border border-gray-200 text-center ${
+                      className={`p-2 border border-gray-200 align-top ${
                         cel?.concluido ? 'bg-green-50 text-green-700' : cel ? 'text-gray-500' : 'text-gray-300'
                       }`}
                     >
-                      {cel ? cel.grupos.join('+') : '—'}
+                      {cel ? (
+                        <>
+                          {cel.grupos.map((g) => (
+                            <div key={g}>{LABEL_GRUPO[g]}</div>
+                          ))}
+                          {cel.concluido && cel.data_execucao && (
+                            <div className="mt-1 text-[10px] text-green-800">
+                              Realizado em {formatDateBR(cel.data_execucao)}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        '—'
+                      )}
                     </td>
                   )
                 })}
