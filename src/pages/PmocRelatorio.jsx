@@ -162,50 +162,47 @@ export default function PmocRelatorio() {
           </tbody>
         </table>
 
-        <h2 className="text-sm font-semibold text-gray-800 mb-2">Execução mês a mês</h2>
-        <table className="w-full text-xs border-collapse">
-          <thead>
-            <tr className="bg-gray-50 text-gray-600">
-              <th className="text-left p-2 border border-gray-200">Equipamento</th>
-              {visitas.map((v) => (
-                <th key={v.id} className="p-2 border border-gray-200">Mês {v.numero_mes}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {equipamentos.map((eq) => (
-              <tr key={eq.id}>
-                <td className="p-2 border border-gray-200">{eq.descricao_equipamento || '—'}</td>
-                {visitas.map((v) => {
-                  const cel = (matriz[eq.id] || {})[v.numero_mes]
-                  return (
-                    <td
-                      key={v.id}
-                      className={`p-2 border border-gray-200 align-top ${
-                        cel?.concluido ? 'bg-green-50 text-green-700' : cel ? 'text-gray-500' : 'text-gray-300'
-                      }`}
-                    >
-                      {cel ? (
-                        <>
-                          {cel.grupos.map((g) => (
-                            <div key={g}>{LABEL_GRUPO[g]}</div>
-                          ))}
-                          {cel.concluido && cel.data_execucao && (
-                            <div className="mt-1 text-[10px] text-green-800">
-                              Realizado em {formatDateBR(cel.data_execucao)}
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                  )
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <h2 className="text-sm font-semibold text-gray-800 mb-3">Execução mês a mês</h2>
+        <div className="space-y-5 mb-6">
+          {equipamentos.map((eq) => (
+            <div key={eq.id} className="break-inside-avoid">
+              <p className="text-xs font-semibold text-gray-800 mb-1">
+                {eq.descricao_equipamento || '(equipamento)'}
+                {eq.local && <span className="text-gray-400 font-normal"> · {eq.local}</span>}
+              </p>
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-600">
+                    <th className="text-left p-1.5 border border-gray-200 w-16">Mês</th>
+                    <th className="text-left p-1.5 border border-gray-200">Manutenção prevista</th>
+                    <th className="text-left p-1.5 border border-gray-200 w-28">Status</th>
+                    <th className="text-left p-1.5 border border-gray-200 w-28">Data de realização</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visitas.map((v) => {
+                    const cel = (matriz[eq.id] || {})[v.numero_mes]
+                    if (!cel) return null
+                    return (
+                      <tr key={v.id}>
+                        <td className="p-1.5 border border-gray-200">{v.numero_mes}</td>
+                        <td className="p-1.5 border border-gray-200">
+                          {cel.grupos.map((g) => LABEL_GRUPO[g]).join(' + ')}
+                        </td>
+                        <td className={`p-1.5 border border-gray-200 ${cel.concluido ? 'text-green-700' : 'text-gray-500'}`}>
+                          {cel.concluido ? 'Realizado' : 'Pendente'}
+                        </td>
+                        <td className="p-1.5 border border-gray-200">
+                          {cel.concluido && cel.data_execucao ? formatDateBR(cel.data_execucao) : '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
 
         <h2 className="text-sm font-semibold text-gray-800 mb-2 mt-6">Atividades realizadas em cada tipo de manutenção</h2>
         <p className="text-xs text-gray-500 mb-3">
