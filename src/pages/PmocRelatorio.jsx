@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatDateBR } from '../lib/format'
-import { ArrowLeft, Printer, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Printer } from 'lucide-react'
 
 const GRUPOS_ORDEM = ['M', 'H', 'S', 'A']
 
@@ -114,11 +114,6 @@ export default function PmocRelatorio() {
             <p className="text-gray-500">Carga térmica total instalada</p>
             <p className="font-medium text-gray-800">
               {Number(resumo.capacidade_total_btu).toLocaleString('pt-BR')} BTU/h
-              {resumo.exige_rt && (
-                <span className="ml-2 inline-flex items-center gap-1 text-amber-600 text-xs bg-amber-50 rounded-full px-2 py-1">
-                  <AlertTriangle size={12} /> Exige Responsável Técnico (acima de 60.000 BTU/h)
-                </span>
-              )}
             </p>
           </div>
         )}
