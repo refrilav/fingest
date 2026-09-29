@@ -134,6 +134,12 @@ export default function PmocContratoDetalhe() {
         </div>
         <div className="flex items-center gap-3">
           <Link
+            to={`/pmoc/contratos/${id}/plano`}
+            className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-800"
+          >
+            <FileText size={14} /> Ver Plano PMOC
+          </Link>
+          <Link
             to={`/pmoc/contratos/${id}/relatorio`}
             className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-800"
           >
