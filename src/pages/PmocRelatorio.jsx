@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatDateBR } from '../lib/format'
 import { ArrowLeft, Printer } from 'lucide-react'
+import { CHECKLISTS, LABEL_GRUPO } from '../lib/pmoc'
 
 const GRUPOS_ORDEM = ['M', 'H', 'S', 'A']
 
@@ -94,6 +95,14 @@ export default function PmocRelatorio() {
           886/2024 e NBR 17037
         </p>
 
+        <div className="flex flex-wrap gap-3 mb-6 text-xs">
+          {GRUPOS_ORDEM.map((g) => (
+            <span key={g} className="bg-gray-50 border border-gray-200 rounded-full px-3 py-1 text-gray-700">
+              <strong>{g}</strong> = {LABEL_GRUPO[g]}
+            </span>
+          ))}
+        </div>
+
         <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
           <div>
             <p className="text-gray-500">Cliente / Estabelecimento</p>
@@ -180,6 +189,24 @@ export default function PmocRelatorio() {
             ))}
           </tbody>
         </table>
+
+        <h2 className="text-sm font-semibold text-gray-800 mb-2 mt-6">Atividades realizadas em cada tipo de manutenção</h2>
+        <p className="text-xs text-gray-500 mb-3">
+          Sempre que uma célula da tabela acima traz uma letra (M, H, S ou A), as atividades abaixo foram
+          executadas naquele mês para o equipamento correspondente.
+        </p>
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          {GRUPOS_ORDEM.map((g) => (
+            <div key={g} className="text-xs">
+              <p className="font-semibold text-gray-800 mb-1">{g} — {LABEL_GRUPO[g]}</p>
+              <ul className="list-disc list-inside text-gray-600 space-y-0.5">
+                {CHECKLISTS[g].map((item, i) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
 
         <p className="text-xs text-gray-400 mt-6">
           Responsável Técnico: a ser identificado por carimbo no documento físico, conforme aplicável.
